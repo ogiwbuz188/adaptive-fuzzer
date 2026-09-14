@@ -92,8 +92,8 @@ class AdvancedBehavioralFuzzer:
                 else:
                     payload[key] = self._mutate(random.choice(self.corpus))
         return payload
-
-        def _fuzz_worker(self, target):
+        
+             def _fuzz_worker(self, target):
         try:
             path = target["path"]
             method = target["method"]
@@ -124,9 +124,8 @@ class AdvancedBehavioralFuzzer:
         except requests.exceptions.Timeout:
             self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
         except Exception as e:
-            # We catch ALL exceptions here so random mutations don't crash the python runner script
             self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
-
+   
     def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
         body = response.text.lower()
