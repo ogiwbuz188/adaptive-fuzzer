@@ -93,37 +93,39 @@ class AdvancedBehavioralFuzzer:
                     payload[key] = self._mutate(random.choice(self.corpus))
         return payload
 
-    def _fuzz_worker(self, target):
-        path = target["path"]
-        method = target["method"]
-        blueprint = target["blueprint"]
-        
-        headers = {"User-Agent": random.choice(self.user_agents)}
-        time.sleep(random.uniform(0.05, 0.25))
-        
-        url = urljoin(self.base_url, path.lstrip("/"))
-        kwargs = {"timeout": 4, "headers": headers}
-        
-        if method in ["POST", "PUT"]:
-            if blueprint["body_properties"]:
-                kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
-            else:
-                kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
-        else:
-            if blueprint["query"]:
-                chosen_param = random.choice(blueprint["query"])
-                kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
-            else:
-                kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
-                
-        start = time.time()
+        def _fuzz_worker(self, target):
         try:
+            path = target["path"]
+            method = target["method"]
+            blueprint = target["blueprint"]
+            
+            headers = {"User-Agent": random.choice(self.user_agents)}
+            time.sleep(random.uniform(0.05, 0.25))
+            
+            url = urljoin(self.base_url, path.lstrip("/"))
+            kwargs = {"timeout": 4, "headers": headers}
+            
+            if method in ["POST", "PUT"]:
+                if blueprint["body_properties"]:
+                    kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
+                else:
+                    kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
+            else:
+                if blueprint["query"]:
+                    chosen_param = random.choice(blueprint["query"])
+                    kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
+                else:
+                    kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
+                    
+            start = time.time()
             res = self.session.request(method, url, **kwargs)
             self._analyze(res, time.time() - start, method, url, kwargs.get("json") or kwargs.get("params"))
+            
         except requests.exceptions.Timeout:
             self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
         except Exception as e:
-            self._log_anomaly("CONNECTION_DROP_CRASH", 0, method, url, "SOCKET_ERR", str(e))
+            # We catch ALL exceptions here so random mutations don't crash the python runner script
+            self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
 
     def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
