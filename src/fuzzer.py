@@ -92,9 +92,9 @@ class AdvancedBehavioralFuzzer:
                 else:
                     payload[key] = self._mutate(random.choice(self.corpus))
         return payload
-        
-             def _fuzz_worker(self, target):
-        try:
+         
+def _fuzz_worker(self, target):
+    try:
             path = target["path"]
             method = target["method"]
             blueprint = target["blueprint"]
@@ -227,7 +227,7 @@ Captured Evidence Window
           {item['payload']}
           {item['evidence']}
           """
-          html_template +=
+html_template +=
           """
           """
           with open("fuzz_dashboard.html", "w", encoding="utf-8") as f:
