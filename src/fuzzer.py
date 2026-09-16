@@ -169,55 +169,23 @@ class AdvancedBehavioralFuzzer:
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Enterprise Fuzzer Telemetry Dashboard</title>
-    <style>
-        body {{ font-family: system-ui, sans-serif; background: #0b0f19; color: #94a3b8; padding: 2rem; margin: 0; }}
-        .wrapper {{ max-width: 1300px; margin: 0 auto; }}
-        header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #233554; padding-bottom: 1.5rem; margin-bottom: 2rem; }}
-        h1 {{ color: #f8fafc; margin: 0; font-size: 1.6rem; }}
-        .metrics {{ display: flex; gap: 1.5rem; margin-bottom: 2rem; }}
-        .card {{ background: #151d30; border: 1px solid #233554; border-radius: 8px; padding: 1.2rem; flex: 1; }}
-        .num {{ font-size: 2rem; font-weight: bold; color: #38bdf8; }}
-        table {{ width: 100%; border-collapse: collapse; background: #151d30; border: 1px solid #233554; border-radius: 8px; overflow: hidden; }}
-        th, td {{ padding: 1rem; text-align: left; border-bottom: 1px solid #233554; font-size: 0.9rem; }}
-        th {{ background: #0f172a; color: #f8fafc; }}
-        tr:hover td {{ background: #1c273e; }}
-        .code {{ font-family: monospace; background: #0b0f19; padding: 0.5rem; border-radius: 4px; border: 1px solid #233554; color: #cbd5e1; word-break: break-all; max-width: 350px; font-size: 0.8rem; }}
-    </style>
-</head>
-<body>
-    <div class="wrapper">
-        <header>
-            <div>
-                <h1>🛡️ Boundary Telemetry Dashboard</h1>
-                <p style="margin: 0.3rem 0 0 0; font-size:0.85rem;">Autonomous edge-case validation report logs</p>
-            </div>
-        </header>
-
-        <div class="metrics">
-            <div class="card"><h3>Total Scheduled Executions</h3><div class="num">{self.total_requests}</div></div>
-            <div class="card"><h3>Target Routes Extracted</h3><div class="num">{len(self.endpoints)}</div></div>
-            <div class="card"><h3>Vulnerability Hits</h3><div class="num" style="color: #f87171;">{len(self.findings)}</div></div>
-        </div>
-
-        <h2>Behavioral Alert Streams</h2>
+           <h2>Behavioral Alert Streams</h2>
         <table>
             <thead>
                 <tr>
                     <th>Time</th>
                     <th>Anomaly Group</th>
                     <th>Status</th>
-        # Ensure the table header columns align with your loop variables
-        
-        html_template += """
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>"""
+                    <th>Request Context</th>
+                    <th>Payload Trigger</th>
+                    <th>Captured Evidence Window</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
         
         if not self.findings:
-            html_template += """<div style='text-align: center; color: #4ade80; padding: 4rem;'>No boundary errors or execution crashes discovered across endpoint schemas. Target microservice validated within limits.</div>"""
+            html_template += """<tr><td colspan="6" style="text-align: center; color: #4ade80; padding: 4rem;">No boundary errors or execution crashes discovered across endpoint schemas. Target microservice validated within limits.</td></tr>"""
         else:
             for item in self.findings:
                 html_template += f"""
@@ -236,69 +204,15 @@ class AdvancedBehavioralFuzzer:
     </div>
 </body>
 </html>"""
-
+        
         with open("fuzz_dashboard.html", "w", encoding="utf-8") as f:
             f.write(html_template)
         print("[+] UI generation complete. Review findings inside 'fuzz_dashboard.html'.")
 
 if __name__ == "__main__":
-    # Internal Testing configurations (Defaults to local orchestration runner values)
     TARGET_HOST = "http://localhost:9000" 
     SPEC_URL = "http://localhost:9000/swagger.json"
     
     fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
     fuzzer.discover_via_spec(SPEC_URL)
     fuzzer.run_fuzz_session(total_runs=40)
-
-Anomaly Group
-
-Status
-
-Request Context
-
-Payload Trigger
-
-Capture Evidence Window
-
-"""
-
-if not self.findings:
-    html_template +="""No boundary error or execution crashes
-    discovered across endpoint schemas.Target microservice validated
-    within limits.
-
-    """
-
-else:
-    for items in self.findings:
-        html_template +=f"""
-        
-        {item['timestamp']}
-        
-        {item['type']}
-        
-        {item['status']}
-        {item['method']}{item['url']}
-        {item['payload']}{item['evidence']}
-        
-        """
-        
-        html_template += """
-
-
-
-        """
-        
-        with open("fuzz_dashboard.html","w",encoding="utf-8") as f:
-            f.write(html_template)
-            print("[+] UI generation complete. Review findings inside 'fuzz_dashboard.html'.")
-
-if name == "main":
-    TARGET_HOST= "http://localhost:9000"
-    SPEC_URL = "http://localhost:9000/swagger.json"
-
-fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
-fuzzer.discover_via_spec(SPEC_URL)
-fuzzer.run_fuzz_session(total_runs=40)
-        
-    
