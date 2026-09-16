@@ -249,3 +249,56 @@ if __name__ == "__main__":
     fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
     fuzzer.discover_via_spec(SPEC_URL)
     fuzzer.run_fuzz_session(total_runs=40)
+
+Anomaly Group
+
+Status
+
+Request Context
+
+Payload Trigger
+
+Capture Evidence Window
+
+"""
+
+if not self.findings:
+    html_template +="""No boundary error or execution crashes
+    discovered across endpoint schemas.Target microservice validated
+    within limits.
+
+    """
+
+else:
+    for items in self.findings:
+        html_template +=f"""
+        
+        {item['timestamp']}
+        
+        {item['type']}
+        
+        {item['status']}
+        {item['method']}{item['url']}
+        {item['payload']}{item['evidence']}
+        
+        """
+        
+        html_template += """
+
+
+
+        """
+        
+        with open("fuzz_dashboard.html","w",encoding="utf-8") as f:
+            f.write(html_template)
+            print("[+] UI generation complete. Review findings inside 'fuzz_dashboard.html'.")
+
+if name == "main":
+    TARGET_HOST= "http://localhost:9000"
+    SPEC_URL = "http://localhost:9000/swagger.json"
+
+fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
+fuzzer.discover_via_spec(SPEC_URL)
+fuzzer.run_fuzz_session(total_runs=40)
+        
+    
