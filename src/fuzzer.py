@@ -62,7 +62,7 @@ class AdvancedBehavioralFuzzer:
             print(f"[+] Scan map locked. Tracked {len(self.endpoints)} complex routes.")
         except Exception as e:
             print(f"[-] Parsing failed ({str(e)}). Using local fallback layout.")
-            self.endpoints = [{"path": "/api/v1/process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}]
+            self.endpoints = [{"path": "/api/v1/process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}}]
 
     def _mutate(self, seed):
         strategy = random.choice(['overflow', 'type_scramble', 'nested_json', 'traversal', 'format_str'])
@@ -92,40 +92,39 @@ class AdvancedBehavioralFuzzer:
                 else:
                     payload[key] = self._mutate(random.choice(self.corpus))
         return payload
-         
-def _fuzz_worker(self, target):
-    try:
-            path = target["path"]
-            method = target["method"]
-            blueprint = target["blueprint"]
-            
-            headers = {"User-Agent": random.choice(self.user_agents)}
-            time.sleep(random.uniform(0.05, 0.25))
-            
-            url = urljoin(self.base_url, path.lstrip("/"))
-            kwargs = {"timeout": 4, "headers": headers}
-            
-            if method in ["POST", "PUT"]:
-                if blueprint["body_properties"]:
-                    kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
-                else:
-                    kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
+
+    def _fuzz_worker(self, target):
+        path = target["path"]
+        method = target["method"]
+        blueprint = target["blueprint"]
+        
+        headers = {"User-Agent": random.choice(self.user_agents)}
+        time.sleep(random.uniform(0.05, 0.25))
+        
+        url = urljoin(self.base_url, path.lstrip("/"))
+        kwargs = {"timeout": 4, "headers": headers}
+        
+        if method in ["POST", "PUT"]:
+            if blueprint["body_properties"]:
+                kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
             else:
-                if blueprint["query"]:
-                    chosen_param = random.choice(blueprint["query"])
-                    kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
-                else:
-                    kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
-                    
-            start = time.time()
+                kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
+        else:
+            if blueprint["query"]:
+                chosen_param = random.choice(blueprint["query"])
+                kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
+            else:
+                kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
+                
+        start = time.time()
+        try:
             res = self.session.request(method, url, **kwargs)
             self._analyze(res, time.time() - start, method, url, kwargs.get("json") or kwargs.get("params"))
-            
         except requests.exceptions.Timeout:
             self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
         except Exception as e:
-            self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
-   
+            self._log_anomaly("CONNECTION_DROP_CRASH", 0, method, url, "SOCKET_ERR", str(e))
+
     def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
         body = response.text.lower()
@@ -208,37 +207,45 @@ def _fuzz_worker(self, target):
                     <th>Time</th>
                     <th>Anomaly Group</th>
                     <th>Status</th>
-Request Context
-Payload Trigger
-Captured Evidence Window
-"""
-      if not self.findings:
-        html_template += """No boundary errors or execution crashes discovered across
-        endpoint schemas. Target microservice validated within limits.
-        """
-      else:
-        for item in self.findings:
-          html_template += f"""
-          {item['timestamp']}
-          {item['type']}
-          {item['status']}
-          {item['method']}
-          {item['url']}
-          {item['payload']}
-          {item['evidence']}
-          """
-html_template +=
-          """
-          """
-          with open("fuzz_dashboard.html", "w", encoding="utf-8") as f:
+        # Ensure the table header columns align with your loop variables
+        
+        html_template += """
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>"""
+        
+        if not self.findings:
+            html_template += """<div style='text-align: center; color: #4ade80; padding: 4rem;'>No boundary errors or execution crashes discovered across endpoint schemas. Target microservice validated within limits.</div>"""
+        else:
+            for item in self.findings:
+                html_template += f"""
+                <tr>
+                    <td>{item['timestamp']}</td>
+                    <td><strong style="color: #f87171;">{item['type']}</strong></td>
+                    <td><code>{item['status']}</code></td>
+                    <td><span style="font-size:0.85rem; color:#e2e8f0;">{item['method']} {item['url']}</span></td>
+                    <td><div class="code">{item['payload']}</div></td>
+                    <td><div class="code" style="color: #fca5a5;">{item['evidence']}</div></td>
+                </tr>"""
+
+        html_template += """
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>"""
+
+        with open("fuzz_dashboard.html", "w", encoding="utf-8") as f:
             f.write(html_template)
-            print("[+] UI generation complete. Review findings inside 'fuzz_dashboard.html'.")
-            if name == "main":
-              # Internal Testing configurations (Defaults to local orchestration runner values)
-              TARGET_HOST = "http://localhost:9000"
-              SPEC_URL = "http://localhost:9000/swagger.json"
-              fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
-              fuzzer.discover_via_spec(SPEC_URL)
-              fuzzer.run_fuzz_session(total_runs=40)                         
-                                              
-                
+        print("[+] UI generation complete. Review findings inside 'fuzz_dashboard.html'.")
+
+if __name__ == "__main__":
+    # Internal Testing configurations (Defaults to local orchestration runner values)
+    TARGET_HOST = "http://localhost:9000" 
+    SPEC_URL = "http://localhost:9000/swagger.json"
+    
+    fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
+    fuzzer.discover_via_spec(SPEC_URL)
+    fuzzer.run_fuzz_session(total_runs=40)
