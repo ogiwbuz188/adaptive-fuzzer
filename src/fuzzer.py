@@ -196,10 +196,9 @@ class AdvancedBehavioralFuzzer:
             </div>
         </header>
 
-                    <div class="card"><h3>Total Scheduled Executions</h3><div class="num">{self.total_requests}</div></div>
+        <div class="metrics">
+            <div class="card"><h3>Total Scheduled Executions</h3><div class="num">{self.total_requests}</div></div>
             <div class="card"><h3>Target Routes Extracted</h3><div class="num">{len(self.endpoints)}</div></div>
-            <div class="card"><h3>Vulnerability Hits</h3><div class="num" style="color: #f87171;">{len(self.findings)}</div></div>
-        </div>
 
         <h2>Behavioral Alert Streams</h2>
         <table>
