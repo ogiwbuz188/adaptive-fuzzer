@@ -94,9 +94,10 @@ class AdvancedBehavioralFuzzer:
         return payload
 
     def _fuzz_worker(self, target):
+        url = ""
+        method = target["method"]
         try:
             path = target["path"]
-            method = target["method"]
             blueprint = target["blueprint"]
             
             headers = {"User-Agent": random.choice(self.user_agents)}
@@ -110,16 +111,18 @@ class AdvancedBehavioralFuzzer:
                     kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
                 else:
                     kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
+                send_payload = kwargs["json"]
             else:
                 if blueprint["query"]:
                     chosen_param = random.choice(blueprint["query"])
                     kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
                 else:
                     kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
+                send_payload = kwargs["params"]
                     
             start = time.time()
             res = self.session.request(method, url, **kwargs)
-            self._analyze(res, time.time() - start, method, url, kwargs.get("json") or kwargs.get("params"))
+            self._analyze(res, time.time() - start, method, url, send_payload)
             
         except requests.exceptions.Timeout:
             self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
@@ -162,10 +165,15 @@ class AdvancedBehavioralFuzzer:
     def run_fuzz_session(self, total_runs=40):
         print(f"[*] Dispatching execution matrix across {self.max_workers} threads...")
         self.total_requests = total_runs
+        if not self.endpoints:
+            print("[-] No endpoints loaded. Call discover_via_spec() first or using local fallback layout.")
+            self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}}}}]
+            
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [executor.submit(self._fuzz_worker, random.choice(self.endpoints)) for _ in range(total_runs)]
             concurrent.futures.wait(futures)
 
+    # 📍 The report_name variable is defined here as a default parameter
     def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
         html_template = f"""<!DOCTYPE html>
 <html lang="en">
@@ -239,11 +247,11 @@ class AdvancedBehavioralFuzzer:
 with open(report_name, "w", encoding="utf-8") as f:
     f.write(html_template)
 print(f"[+] UI generation complete. Review findings inside '{report_name}'.")
-    
-if name == "main":
-    pass
 
-        
-
-        
+if __name__ == "__main__":
+    TARGET_HOST = "http://localhost:9000" 
+    SPEC_URL = "http://localhost:9000/swagger.json"
     
+    fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
+    fuzzer.discover_via_spec(SPEC_URL)
+    fuzzer.run_fuzz_session(total_runs=40)
