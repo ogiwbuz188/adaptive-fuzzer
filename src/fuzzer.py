@@ -173,8 +173,13 @@ class AdvancedBehavioralFuzzer:
             futures = [executor.submit(self._fuzz_worker, random.choice(self.endpoints)) for _ in range(total_runs)]
             concurrent.futures.wait(futures)
 
-    # 📍 The report_name variable is defined here as a default parameter
+    class DashboordManager:
+        def _init_(self, output_dir="/var/reports"):
+            self.output_dir = output_dir
     def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
+        full_path = f"{self.output_dir}/{reprt_name}"
+        print{f"Creating dashboard at: {full_path}")
+        return full_path
         html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
