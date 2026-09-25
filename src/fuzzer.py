@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import string
 import time
@@ -182,6 +183,8 @@ class DashboardManager:
     def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
         full_path = f"{self.output_dir}/{report_name}"
         print(f"Creating dashboard at: {full_path}")
+
+        os.makedirs(self.output_dir, exist_ok=True)
 
         html_template = f"""<!DOCTYPE html>
 <html lang="en">
