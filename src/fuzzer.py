@@ -99,13 +99,13 @@ class AdvancedBehavioralFuzzer:
         try:
             path = target["path"]
             blueprint = target["blueprint"]
-            
+
             headers = {"User-Agent": random.choice(self.user_agents)}
             time.sleep(random.uniform(0.05, 0.25))
-            
+
             url = urljoin(self.base_url, path.lstrip("/"))
             kwargs = {"timeout": 4, "headers": headers}
-            
+
             if method in ["POST", "PUT"]:
                 if blueprint["body_properties"]:
                     kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
@@ -119,28 +119,28 @@ class AdvancedBehavioralFuzzer:
                 else:
                     kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
                 send_payload = kwargs["params"]
-                    
+
             start = time.time()
             res = self.session.request(method, url, **kwargs)
             self._analyze(res, time.time() - start, method, url, send_payload)
-            
+
         except requests.exceptions.Timeout:
             self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
         except Exception as e:
             self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
 
-def _analyze(self, response, duration, method, url, send_payload):
+    def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
         body = response.text.lower()
-        
+
         if response.status_code == 500:
             anomalies.append("500_INTERNAL_SERVER_ERROR")
         elif response.status_code == 413:
             anomalies.append("413_PAYLOAD_TOO_LARGE")
-            
+
         if duration > 1.5:
             anomalies.append("HIGH_LATENCY_DELAY")
-            
+
         indicators = ["stack trace", "exception", "nullpointer", "overflow", "fatal", "segmentation fault"]
         for ind in indicators:
             if ind in body:
@@ -149,9 +149,9 @@ def _analyze(self, response, duration, method, url, send_payload):
         for anomaly in anomalies:
             self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
 
-def _log_anomaly(self, classification, status, method, url, payload, snippet):
+    def _log_anomaly(self, classification, status, method, url, payload, snippet):
         self.findings.append({
-            "timestamp": ist_timestamp,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
             "type": classification,
             "status": status,
             "method": method,
@@ -160,26 +160,30 @@ def _log_anomaly(self, classification, status, method, url, payload, snippet):
             "evidence": snippet.replace("<", "&lt;").replace(">", "&gt;")
         })
 
-def run_fuzz_session(self, total_runs=40):
+    def run_fuzz_session(self, total_runs=40):
         print(f"[*] Dispatching execution matrix across {self.max_workers} threads...")
         self.total_requests = total_runs
         if not self.endpoints:
             print("[-] No endpoints loaded. Call discover_via_spec() first or using local fallback layout.")
             self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}}}}]
-            
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [executor.submit(self._fuzz_worker, random.choice(self.endpoints)) for _ in range(total_runs)]
             concurrent.futures.wait(futures)
 
-class DashboordManager:
-        def _init_(self, output_dir="/var/reports"):
-            self.output_dir = output_dir
-            
-        def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
-           full_path = f"{self.output_dir}/{reprt_name}"
-           print(f"Creating dashboard at: {full_path}")
-           
-           html_template = f"""<!DOCTYPE html>
+
+class DashboardManager:
+    def __init__(self, output_dir="/var/reports", findings=None, endpoints=None, total_requests=0):
+        self.output_dir = output_dir
+        self.findings = findings or []
+        self.endpoints = endpoints or []
+        self.total_requests = total_requests
+
+    def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
+        full_path = f"{self.output_dir}/{report_name}"
+        print(f"Creating dashboard at: {full_path}")
+
+        html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -211,6 +215,7 @@ class DashboordManager:
         <div class="metrics">
             <div class="card"><h3>Total Scheduled Executions</h3><div class="num">{self.total_requests}</div></div>
             <div class="card"><h3>Target Routes Extracted</h3><div class="num">{len(self.endpoints)}</div></div>
+        </div>
 
         <h2>Behavioral Alert Streams</h2>
         <table>
@@ -226,10 +231,10 @@ class DashboordManager:
             </thead>
             <tbody>
         """
-        
-if not self.findings:
+
+        if not self.findings:
             html_template += """<tr><td colspan="6" style="text-align: center; color: #4ade80; padding: 4rem;">No boundary errors or execution crashes discovered across endpoint schemas. Target microservice validated within limits.</td></tr>"""
-else:
+        else:
             for item in self.findings:
                 html_template += f"""
                 <tr>
@@ -241,23 +246,31 @@ else:
                     <td><div class="code" style="color: #fca5a5;">{item['evidence']}</div></td>
                 </tr>"""
 
-html_template += """
+        html_template += """
             </tbody>
         </table>
     </div>
 </body>
 </html>"""
 
-       return full_path
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(html_template)
+        print(f"[+] UI generation complete. Review findings inside '{full_path}'.")
+        return full_path
 
-with open(report_name, "w", encoding="utf-8") as f:
-    f.write(html_template)
-print(f"[+] UI generation complete. Review findings inside '{report_name}'.")
 
 if __name__ == "__main__":
-    TARGET_HOST = "http://localhost:9000" 
+    TARGET_HOST = "http://localhost:9000"
     SPEC_URL = "http://localhost:9000/swagger.json"
-    
+
     fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
     fuzzer.discover_via_spec(SPEC_URL)
     fuzzer.run_fuzz_session(total_runs=40)
+
+    dashboard = DashboardManager(
+        output_dir="/var/reports",
+        findings=fuzzer.findings,
+        endpoints=fuzzer.endpoints,
+        total_requests=fuzzer.total_requests,
+    )
+    dashboard.generate_web_dashboard(report_name="fuzz_dashboard.html")
