@@ -34,25 +34,25 @@ def main():
         print(f"[*] AUTONOMOUS EXECUTION: Booting up target script -> {server_file}")
         print("="*70)
         
-        # Reset findings pool so reports don't mix
+        # Reset engine logs so reports don't bleed into each other
         fuzzer.findings = []
         
         dynamic_path = extract_target_path(server_file)
         print(f"[+] Dynamically mapped target route: {dynamic_path}")
         
+        # Set explicitly matched names and configurations
         if "v2" in dynamic_path:
             fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
             runs = 50
+            report_name = "vulnerable_complex_server_dashboard.html"
         else:
             fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}]
             runs = 30
+            report_name = "mock_server_dashboard.html"
 
+        # Spin up the target server process
         server_proc = subprocess.Popen([sys.executable, server_file])
         time.sleep(2)  
-        
-        # FIXED: Extracting index [0] to get the raw name string element cleanly
-        file_prefix = os.path.splitext(os.path.basename(server_file))[0]
-        custom_report_name = f"{file_prefix}_dashboard.html"
         
         try:
             print(f"[*] Launching dynamic fuzz loop wrapper ({runs} iterations)...")
@@ -64,7 +64,8 @@ def main():
             server_proc.terminate()
             server_proc.wait()
             
-        fuzzer.generate_web_dashboard(report_name=custom_report_name)
+        # Deliver the matching report string straight to the engine
+        fuzzer.generate_web_dashboard(report_name=report_name)
         time.sleep(2)
         
     print("\n[+] Pipeline Complete! Isolated reports successfully compiled.")
