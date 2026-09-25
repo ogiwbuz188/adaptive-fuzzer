@@ -178,7 +178,7 @@ class AdvancedBehavioralFuzzer:
             self.output_dir = output_dir
     def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
         full_path = f"{self.output_dir}/{reprt_name}"
-        print{f"Creating dashboard at: {full_path}")
+        print(f"Creating dashboard at: {full_path}")
         return full_path
         html_template = f"""<!DOCTYPE html>
 <html lang="en">
