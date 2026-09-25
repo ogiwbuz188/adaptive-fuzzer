@@ -17,6 +17,6 @@ jobs:
     - name: Save Report
       uses: actions/upload-artifact@v4
       if: always()
-    with:
-      name: fuzzer-telemetry-reports
-      path: "*_dashboard.html"
+      with:
+        name: fuzzer-telemetry-reports
+        path: "*_dashboard.html"
