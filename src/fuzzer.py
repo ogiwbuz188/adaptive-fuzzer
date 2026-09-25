@@ -62,7 +62,7 @@ class AdvancedBehavioralFuzzer:
             print(f"[+] Scan map locked. Tracked {len(self.endpoints)} complex routes.")
         except Exception as e:
             print(f"[-] Parsing failed ({str(e)}). Using local fallback layout.")
-                 self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
+            self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
 
     def _mutate(self, seed):
         strategy = random.choice(['overflow', 'type_scramble', 'nested_json', 'traversal', 'format_str'])
@@ -94,36 +94,37 @@ class AdvancedBehavioralFuzzer:
         return payload
 
     def _fuzz_worker(self, target):
-        path = target["path"]
-        method = target["method"]
-        blueprint = target["blueprint"]
-        
-        headers = {"User-Agent": random.choice(self.user_agents)}
-        time.sleep(random.uniform(0.05, 0.25))
-        
-        url = urljoin(self.base_url, path.lstrip("/"))
-        kwargs = {"timeout": 4, "headers": headers}
-        
-        if method in ["POST", "PUT"]:
-            if blueprint["body_properties"]:
-                kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
-            else:
-                kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
-        else:
-            if blueprint["query"]:
-                chosen_param = random.choice(blueprint["query"])
-                kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
-            else:
-                kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
-                
-        start = time.time()
         try:
+            path = target["path"]
+            method = target["method"]
+            blueprint = target["blueprint"]
+            
+            headers = {"User-Agent": random.choice(self.user_agents)}
+            time.sleep(random.uniform(0.05, 0.25))
+            
+            url = urljoin(self.base_url, path.lstrip("/"))
+            kwargs = {"timeout": 4, "headers": headers}
+            
+            if method in ["POST", "PUT"]:
+                if blueprint["body_properties"]:
+                    kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
+                else:
+                    kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
+            else:
+                if blueprint["query"]:
+                    chosen_param = random.choice(blueprint["query"])
+                    kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
+                else:
+                    kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
+                    
+            start = time.time()
             res = self.session.request(method, url, **kwargs)
             self._analyze(res, time.time() - start, method, url, kwargs.get("json") or kwargs.get("params"))
+            
         except requests.exceptions.Timeout:
             self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
         except Exception as e:
-            self._log_anomaly("CONNECTION_DROP_CRASH", 0, method, url, "SOCKET_ERR", str(e))
+            self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
 
     def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
@@ -146,8 +147,11 @@ class AdvancedBehavioralFuzzer:
             self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
 
     def _log_anomaly(self, classification, status, method, url, payload, snippet):
+        # Convert GitHub cloud execution clocks natively to Indian Standard Time (IST) 
+        ist_timestamp = time.strftime("%H:%M:%S", time.gmtime(time.time() + 19800))
+        
         self.findings.append({
-            "timestamp": time.strftime("%H:%M:%S"),
+            "timestamp": ist_timestamp,
             "type": classification,
             "status": status,
             "method": method,
@@ -169,7 +173,37 @@ class AdvancedBehavioralFuzzer:
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-           <h2>Behavioral Alert Streams</h2>
+    <title>Enterprise Fuzzer Telemetry Dashboard</title>
+    <style>
+        body {{ font-family: system-ui, sans-serif; background: #0b0f19; color: #94a3b8; padding: 2rem; margin: 0; }}
+        .wrapper {{ max-width: 1300px; margin: 0 auto; }}
+        header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #233554; padding-bottom: 1.5rem; margin-bottom: 2rem; }}
+        h1 {{ color: #f8fafc; margin: 0; font-size: 1.6rem; }}
+        .metrics {{ display: flex; gap: 1.5rem; margin-bottom: 2rem; }}
+        .card {{ background: #151d30; border: 1px solid #233554; border-radius: 8px; padding: 1.2rem; flex: 1; }}
+        .num {{ font-size: 2rem; font-weight: bold; color: #38bdf8; }}
+        table {{ width: 100%; border-collapse: collapse; background: #151d30; border: 1px solid #233554; border-radius: 8px; overflow: hidden; }}
+        th, td {{ padding: 1rem; text-align: left; border-bottom: 1px solid #233554; font-size: 0.9rem; }}
+        th {{ background: #0f172a; color: #f8fafc; }}
+        tr:hover td {{ background: #1c273e; }}
+        .code {{ font-family: monospace; background: #0b0f19; padding: 0.5rem; border-radius: 4px; border: 1px solid #233554; color: #cbd5e1; word-break: break-all; max-width: 350px; font-size: 0.8rem; }}
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <header>
+            <div>
+                <h1>🛡️ Boundary Telemetry Dashboard</h1>
+                <p style="margin: 0.3rem 0 0 0; font-size:0.85rem;">Autonomous edge-case validation report logs</p>
+            </div>
+        </header>
+
+                    <div class="card"><h3>Total Scheduled Executions</h3><div class="num">{self.total_requests}</div></div>
+            <div class="card"><h3>Target Routes Extracted</h3><div class="num">{len(self.endpoints)}</div></div>
+            <div class="card"><h3>Vulnerability Hits</h3><div class="num" style="color: #f87171;">{len(self.findings)}</div></div>
+        </div>
+
+        <h2>Behavioral Alert Streams</h2>
         <table>
             <thead>
                 <tr>
@@ -216,3 +250,8 @@ if __name__ == "__main__":
     fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
     fuzzer.discover_via_spec(SPEC_URL)
     fuzzer.run_fuzz_session(total_runs=40)
+
+        
+
+        
+    
