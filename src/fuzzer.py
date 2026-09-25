@@ -129,7 +129,7 @@ class AdvancedBehavioralFuzzer:
         except Exception as e:
             self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
 
-    def _analyze(self, response, duration, method, url, send_payload):
+def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
         body = response.text.lower()
         
@@ -149,9 +149,7 @@ class AdvancedBehavioralFuzzer:
         for anomaly in anomalies:
             self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
 
-    def _log_anomaly(self, classification, status, method, url, payload, snippet):
-        ist_timestamp = time.strftime("%H:%M:%S", time.gmtime(time.time() + 19800))
-        
+def _log_anomaly(self, classification, status, method, url, payload, snippet):
         self.findings.append({
             "timestamp": ist_timestamp,
             "type": classification,
@@ -162,7 +160,7 @@ class AdvancedBehavioralFuzzer:
             "evidence": snippet.replace("<", "&lt;").replace(">", "&gt;")
         })
 
-    def run_fuzz_session(self, total_runs=40):
+def run_fuzz_session(self, total_runs=40):
         print(f"[*] Dispatching execution matrix across {self.max_workers} threads...")
         self.total_requests = total_runs
         if not self.endpoints:
@@ -173,14 +171,14 @@ class AdvancedBehavioralFuzzer:
             futures = [executor.submit(self._fuzz_worker, random.choice(self.endpoints)) for _ in range(total_runs)]
             concurrent.futures.wait(futures)
 
-    class DashboordManager:
+class DashboordManager:
         def _init_(self, output_dir="/var/reports"):
             self.output_dir = output_dir
-    def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
-        full_path = f"{self.output_dir}/{reprt_name}"
+        def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
+           full_path = f"{self.output_dir}/{reprt_name}"
         print(f"Creating dashboard at: {full_path}")
-        return full_path
-        html_template = f"""<!DOCTYPE html>
+                   
+html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -228,9 +226,9 @@ class AdvancedBehavioralFuzzer:
             <tbody>
         """
         
-        if not self.findings:
+if not self.findings:
             html_template += """<tr><td colspan="6" style="text-align: center; color: #4ade80; padding: 4rem;">No boundary errors or execution crashes discovered across endpoint schemas. Target microservice validated within limits.</td></tr>"""
-        else:
+else:
             for item in self.findings:
                 html_template += f"""
                 <tr>
@@ -242,7 +240,7 @@ class AdvancedBehavioralFuzzer:
                     <td><div class="code" style="color: #fca5a5;">{item['evidence']}</div></td>
                 </tr>"""
 
-        html_template += """
+html_template += """
             </tbody>
         </table>
     </div>
