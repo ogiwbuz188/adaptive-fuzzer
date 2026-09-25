@@ -7,31 +7,21 @@ import re
 from src.fuzzer import AdvancedBehavioralFuzzer
 
 def extract_target_path(file_path):
-    """
-    Autonomously scans the text inside the server file to extract 
-    the active REST endpoint route using regex.
-    """
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-            
-        # Look for patterns like /api/v1/... or /api/v2/...
         matches = re.findall(r'"(/api/v[0-9]/[^"]+)"', content)
         if matches:
             return matches[0]
     except Exception as e:
         print(f"[-] Could not read spec path for {file_path}: {str(e)}")
-    
-    # Fallback default path if regex doesn't match perfectly
     return "/api/v1/process"
 
 def main():
-    print("[*] Starting Autonomous Multi-Target Fuzzing Pipeline...")
+    print("[*] Starting Autonomous Multi-Target Isolated Fuzzing Pipeline...")
     
-    # Initialize your centralized master fuzzer instance
     fuzzer = AdvancedBehavioralFuzzer(base_url="http://localhost:9000", max_workers=5)
     
-    # Autonomously find all python server files inside the tests/ directory
     search_pattern = os.path.join("tests", "*.py")
     test_servers = glob.glob(search_pattern)
     
@@ -39,18 +29,17 @@ def main():
         print("[-] No test servers discovered inside the tests/ directory folder.")
         return
         
-    print(f"[+] Discovered {len(test_servers)} unique test server frameworks to profile.")
-    
     for server_file in sorted(test_servers):
         print("\n" + "="*70)
         print(f"[*] AUTONOMOUS EXECUTION: Booting up target script -> {server_file}")
         print("="*70)
         
-        # 1. Discover the target route dynamically from the file's raw content
+        # 🧪 CRITICAL SPLIT CONFIGURATION: Reset findings pool so reports don't mix!
+        fuzzer.findings = []
+        
         dynamic_path = extract_target_path(server_file)
         print(f"[+] Dynamically mapped target route: {dynamic_path}")
         
-        # 2. Configure the fuzzer's parameters on the fly based on the path layout
         if "v2" in dynamic_path:
             fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
             runs = 50
@@ -58,25 +47,29 @@ def main():
             fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}]
             runs = 30
 
-        # 3. Spin up the server file as an independent background process
         server_proc = subprocess.Popen([sys.executable, server_file])
-        time.sleep(2)  # Give the server port 2 seconds to bind securely to port 9000
+        time.sleep(2)  
+        
+        # Create a unique report name matching the server file prefix
+        base_name = os.path.splitext(os.path.basename(server_file))[0]
+        custom_report_name = f"{base_name}_dashboard.html"
         
         try:
             print(f"[*] Launching dynamic fuzz loop wrapper ({runs} iterations)...")
+            # Run fuzz session but block the internal call to generate_web_dashboard
             fuzzer.run_fuzz_session(total_runs=runs)
         except Exception as run_error:
             print(f"[-] Error occurred while fuzzing {server_file}: {str(run_error)}")
         finally:
-            # 4. Safely kill the active server process before looping to the next file
             print(f"[*] Shutting down target script process safely -> {server_file}")
             server_proc.terminate()
             server_proc.wait()
             
-        # Give the operating system network sockets a 2-second cooldown to avoid port conflicts
+        # Manually compile the separate, customized report file for this specific target
+        fuzzer.generate_web_dashboard(report_name=custom_report_name)
         time.sleep(2)
         
-    print("\n[+] Pipeline Complete! All discovered test targets successfully audited.")
+    print("\n[+] Pipeline Complete! Isolated reports successfully compiled.")
 
 if __name__ == "__main__":
     main()
