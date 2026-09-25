@@ -174,11 +174,12 @@ def run_fuzz_session(self, total_runs=40):
 class DashboordManager:
         def _init_(self, output_dir="/var/reports"):
             self.output_dir = output_dir
+            
         def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
            full_path = f"{self.output_dir}/{reprt_name}"
            print(f"Creating dashboard at: {full_path}")
-           return {full_path}
-                html_template = f"""<!DOCTYPE html>
+           
+           html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -246,6 +247,8 @@ html_template += """
     </div>
 </body>
 </html>"""
+
+       return full_path
 
 with open(report_name, "w", encoding="utf-8") as f:
     f.write(html_template)
