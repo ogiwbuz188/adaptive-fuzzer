@@ -34,7 +34,7 @@ def main():
         print(f"[*] AUTONOMOUS EXECUTION: Booting up target script -> {server_file}")
         print("="*70)
         
-        # Reset the engine findings list for each test container loop
+        # Reset findings pool so reports don't mix
         fuzzer.findings = []
         
         dynamic_path = extract_target_path(server_file)
@@ -50,7 +50,7 @@ def main():
         server_proc = subprocess.Popen([sys.executable, server_file])
         time.sleep(2)  
         
-        # Pull only the string prefix out of the filename component tuple safely
+        # FIXED: Extracting index [0] to get the raw name string element cleanly
         file_prefix = os.path.splitext(os.path.basename(server_file))[0]
         custom_report_name = f"{file_prefix}_dashboard.html"
         
@@ -64,7 +64,6 @@ def main():
             server_proc.terminate()
             server_proc.wait()
             
-        # Manually compile report name using the clean filename identifier
         fuzzer.generate_web_dashboard(report_name=custom_report_name)
         time.sleep(2)
         
