@@ -168,7 +168,7 @@ class AdvancedBehavioralFuzzer:
             concurrent.futures.wait(futures)
         self.generate_web_dashboard()
 
-    def generate_web_dashboard(self):
+def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
         html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -238,11 +238,11 @@ class AdvancedBehavioralFuzzer:
     </div>
 </body>
 </html>"""
-        
-        with open("fuzz_dashboard.html", "w", encoding="utf-8") as f:
-            f.write(html_template)
-        print("[+] UI generation complete. Review findings inside 'fuzz_dashboard.html'.")
 
+with open(report_name, "w", encoding="utf-8") as f:
+    f.write(html_template)
+print(f"[+] UI generation complete. Review findings inside '{report_name}'.")
+    
 if __name__ == "__main__":
     TARGET_HOST = "http://localhost:9000" 
     SPEC_URL = "http://localhost:9000/swagger.json"
