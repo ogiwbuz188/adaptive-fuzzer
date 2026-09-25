@@ -34,7 +34,7 @@ def main():
         print(f"[*] AUTONOMOUS EXECUTION: Booting up target script -> {server_file}")
         print("="*70)
         
-        # 🧪 CRITICAL SPLIT CONFIGURATION: Reset findings pool so reports don't mix!
+        # Reset the engine findings list for each test container loop
         fuzzer.findings = []
         
         dynamic_path = extract_target_path(server_file)
@@ -50,13 +50,12 @@ def main():
         server_proc = subprocess.Popen([sys.executable, server_file])
         time.sleep(2)  
         
-        # Create a unique report name matching the server file prefix
-        base_name = os.path.splitext(os.path.basename(server_file))[0]
-        custom_report_name = f"{base_name}_dashboard.html"
+        # Pull only the string prefix out of the filename component tuple safely
+        file_prefix = os.path.splitext(os.path.basename(server_file))[0]
+        custom_report_name = f"{file_prefix}_dashboard.html"
         
         try:
             print(f"[*] Launching dynamic fuzz loop wrapper ({runs} iterations)...")
-            # Run fuzz session but block the internal call to generate_web_dashboard
             fuzzer.run_fuzz_session(total_runs=runs)
         except Exception as run_error:
             print(f"[-] Error occurred while fuzzing {server_file}: {str(run_error)}")
@@ -65,7 +64,7 @@ def main():
             server_proc.terminate()
             server_proc.wait()
             
-        # Manually compile the separate, customized report file for this specific target
+        # Manually compile report name using the clean filename identifier
         fuzzer.generate_web_dashboard(report_name=custom_report_name)
         time.sleep(2)
         
