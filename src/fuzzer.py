@@ -62,8 +62,8 @@ class AdvancedBehavioralFuzzer:
             print(f"[+] Scan map locked. Tracked {len(self.endpoints)} complex routes.")
         except Exception as e:
             print(f"[-] Parsing failed ({str(e)}). Using local fallback layout.")
-            self.endpoints = [{"path": "/api/v1/process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}]
-            
+            self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
+
     def _mutate(self, seed):
         strategy = random.choice(['overflow', 'type_scramble', 'nested_json', 'traversal', 'format_str'])
         if strategy == 'overflow':
@@ -147,7 +147,6 @@ class AdvancedBehavioralFuzzer:
             self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
 
     def _log_anomaly(self, classification, status, method, url, payload, snippet):
-        # Convert GitHub cloud execution clocks natively to Indian Standard Time (IST) 
         ist_timestamp = time.strftime("%H:%M:%S", time.gmtime(time.time() + 19800))
         
         self.findings.append({
@@ -166,9 +165,8 @@ class AdvancedBehavioralFuzzer:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [executor.submit(self._fuzz_worker, random.choice(self.endpoints)) for _ in range(total_runs)]
             concurrent.futures.wait(futures)
-        self.generate_web_dashboard()
 
-def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
+    def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
         html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -243,13 +241,8 @@ with open(report_name, "w", encoding="utf-8") as f:
     f.write(html_template)
 print(f"[+] UI generation complete. Review findings inside '{report_name}'.")
     
-if __name__ == "__main__":
-    TARGET_HOST = "http://localhost:9000" 
-    SPEC_URL = "http://localhost:9000/swagger.json"
-    
-    fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
-    fuzzer.discover_via_spec(SPEC_URL)
-    fuzzer.run_fuzz_session(total_runs=40)
+if name == "main":
+    pass
 
         
 
