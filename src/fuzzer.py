@@ -178,8 +178,7 @@ class DashboordManager:
            full_path = f"{self.output_dir}/{reprt_name}"
            print(f"Creating dashboard at: {full_path}")
            return {full_path}
-                   
-html_template = f"""<!DOCTYPE html>
+                html_template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
