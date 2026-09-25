@@ -62,7 +62,7 @@ class AdvancedBehavioralFuzzer:
             print(f"[+] Scan map locked. Tracked {len(self.endpoints)} complex routes.")
         except Exception as e:
             print(f"[-] Parsing failed ({str(e)}). Using local fallback layout.")
-            self.endpoints = [{"path": "/api/v1/process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}]
+                 self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
 
     def _mutate(self, seed):
         strategy = random.choice(['overflow', 'type_scramble', 'nested_json', 'traversal', 'format_str'])
