@@ -1,136 +1,295 @@
+import html
 import json
-import os
 import random
 import string
+import threading
 import time
-import concurrent.futures
+import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urljoin
+
 import requests
 
+
+HOST = "127.0.0.1"
+PORT = 9000
+BASE_URL = f"http://{HOST}:{PORT}"
+REPORT_NAME = "mock_server_dashboard.html"
+
+
+class MockServerHandler(BaseHTTPRequestHandler):
+    """Local HTTP target used by the fuzzer."""
+
+    def log_message(self, format_string, *args):
+        # Keep GitHub Actions output focused on the fuzzer.
+        return
+
+    def send_json(self, status_code, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_text(self, status_code, text):
+        body = text.encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path == "/swagger.json":
+            schema = {
+                "paths": {
+                    "/api/v1/process": {
+                        "post": {
+                            "requestBody": {
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "data": {"type": "string"},
+                                                "config": {"type": "object"},
+                                            },
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            self.send_json(200, schema)
+            return
+
+        self.send_text(404, "Not found")
+
+    def do_POST(self):
+        if self.path != "/api/v1/process":
+            self.send_text(404, "Not found")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(content_length)
+            data = json.loads(body.decode("utf-8"))
+        except Exception:
+            self.send_text(400, "Invalid JSON")
+            return
+
+        payload = data.get("data") or data.get("config")
+
+        if isinstance(payload, str) and len(payload) > 10000:
+            self.send_text(
+                500,
+                "Fatal Error: Segmentation fault. "
+                "Heap allocation memory limit exhausted.",
+            )
+            return
+
+        if isinstance(payload, dict) and any(
+            isinstance(key, str) and key in string.ascii_letters
+            for key in payload
+        ):
+            time.sleep(1.6)
+            self.send_json(200, {"status": "heavy_processing_complete"})
+            return
+
+        if isinstance(payload, str) and "etc/passwd" in payload:
+            self.send_text(
+                500,
+                "Internal Exception: java.io.FileNotFoundException: "
+                "Access denied to local system configurations.",
+            )
+            return
+
+        self.send_json(200, {"status": "accepted"})
+
+
 class AdvancedBehavioralFuzzer:
-    def __init__(self, base_url, max_workers=5, auth_token=None):
-        self.base_url = base_url
+    def __init__(self, base_url, max_workers=5):
+        self.base_url = base_url.rstrip("/")
         self.max_workers = max_workers
-        self.session = requests.Session()
-        
-        if auth_token:
-            self.session.headers.update({"Authorization": f"Bearer {auth_token}"})
-            
-        self.user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/119.0"
-        ]
-        
-        self.corpus = [
-            "test_payload", '{"admin": true}', "' OR 1=1 --", "<script>alert(1)</script>",
-            "A" * 1000, "A" * 30000, "-1", "2147483647", "null", "[]", "{}"
-        ]
         self.endpoints = []
         self.findings = []
         self.total_requests = 0
+        self.findings_lock = threading.Lock()
 
-    def discover_via_spec(self, json_spec_url_or_path):
-        print(f"[*] Extracting routes from schema: {json_spec_url_or_path}")
-        try:
-            if json_spec_url_or_path.startswith("http"):
-                spec = self.session.get(json_spec_url_or_path, timeout=5).json()
-            else:
-                with open(json_spec_url_or_path, 'r') as f:
-                    spec = json.load(f)
-            
-            for path, methods in spec.get("paths", {}).items():
-                for method, details in methods.items():
-                    if method.upper() not in ["GET", "POST", "PUT", "DELETE"]:
-                        continue
-                    
-                    param_structure = {"query": [], "body_properties": {}}
-                    for param in details.get("parameters", []):
-                        if param.get("in") in ["query", "formData"]:
-                            param_structure["query"].append(param.get("name"))
-                            
-                    if "requestBody" in details:
-                        content = details["requestBody"].get("content", {})
-                        schema = content.get("application/json", {}).get("schema", {})
-                        if "properties" in schema:
-                            param_structure["body_properties"] = schema["properties"]
+        self.user_agents = [
+            (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+            ),
+            (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15"
+            ),
+            (
+                "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) "
+                "Gecko/20100101 Firefox/119.0"
+            ),
+        ]
 
-                    self.endpoints.append({
+        self.corpus = [
+            "test_payload",
+            '{"admin": true}',
+            "' OR 1=1 --",
+            "<script>alert(1)</script>",
+            "A" * 1000,
+            "A" * 30000,
+            "-1",
+            "2147483647",
+            "null",
+            "[]",
+            "{}",
+        ]
+
+    def discover_via_spec(self, spec_url):
+        print(f"[*] Extracting routes from schema: {spec_url}", flush=True)
+
+        response = requests.get(spec_url, timeout=5)
+        response.raise_for_status()
+        spec = response.json()
+
+        for path, methods in spec.get("paths", {}).items():
+            for method, details in methods.items():
+                method = method.upper()
+
+                if method not in {"GET", "POST", "PUT", "DELETE"}:
+                    continue
+
+                blueprint = {
+                    "query": [],
+                    "body_properties": {},
+                }
+
+                for parameter in details.get("parameters", []):
+                    if parameter.get("in") in {"query", "formData"}:
+                        blueprint["query"].append(parameter.get("name"))
+
+                request_body = details.get("requestBody", {})
+                content = request_body.get("content", {})
+                json_schema = content.get("application/json", {}).get(
+                    "schema", {}
+                )
+
+                if "properties" in json_schema:
+                    blueprint["body_properties"] = json_schema["properties"]
+
+                self.endpoints.append(
+                    {
                         "path": path,
-                        "method": method.upper(),
-                        "blueprint": param_structure
-                    })
-            print(f"[+] Scan map locked. Tracked {len(self.endpoints)} complex routes.")
-        except Exception as e:
-            print(f"[-] Parsing failed ({str(e)}). Using local fallback layout.")
-            self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
+                        "method": method,
+                        "blueprint": blueprint,
+                    }
+                )
 
-    def _mutate(self, seed):
-        strategy = random.choice(['overflow', 'type_scramble', 'nested_json', 'traversal', 'format_str'])
-        if strategy == 'overflow':
+        if not self.endpoints:
+            raise RuntimeError("No supported endpoints were discovered")
+
+        print(
+            f"[+] Scan map locked. "
+            f"Tracked {len(self.endpoints)} route(s).",
+            flush=True,
+        )
+
+    def mutate(self, seed):
+        strategy = random.choice(
+            [
+                "overflow",
+                "type_scramble",
+                "nested_json",
+                "traversal",
+                "format_string",
+            ]
+        )
+
+        if strategy == "overflow":
             return str(seed) * 40
-        elif strategy == 'type_scramble':
-            return random.choice([None, True, False, -1, 999999999999, []])
-        elif strategy == 'nested_json':
-            return {random.choice(string.ascii_letters): {random.choice(string.ascii_letters): seed}}
-        elif strategy == 'traversal':
+
+        if strategy == "type_scramble":
+            return random.choice(
+                [None, True, False, -1, 999999999999, []]
+            )
+
+        if strategy == "nested_json":
+            return {
+                random.choice(string.ascii_letters): {
+                    random.choice(string.ascii_letters): seed
+                }
+            }
+
+        if strategy == "traversal":
             return "../" * 12 + "etc/passwd"
-        elif strategy == 'format_str':
+
+        if strategy == "format_string":
             return "%x%s" * 8
+
         return seed
 
-    def _build_enterprise_payload(self, properties):
+    def build_payload(self, properties):
         payload = {}
+
         for key, details in properties.items():
             expected_type = details.get("type", "string")
+
             if random.random() < 0.30:
-                payload[key] = self._mutate(random.choice(self.corpus))
+                payload[key] = self.mutate(random.choice(self.corpus))
+            elif expected_type == "object":
+                nested_properties = details.get(
+                    "properties",
+                    {"nested_fallback": {"type": "string"}},
+                )
+                payload[key] = self.build_payload(nested_properties)
+            elif expected_type == "array":
+                payload[key] = [
+                    self.mutate(random.choice(self.corpus))
+                ]
             else:
-                if expected_type == "object":
-                    payload[key] = self._build_enterprise_payload(details.get("properties", {"nested_fallback": {}}))
-                elif expected_type == "array":
-                    payload[key] = [self._mutate(random.choice(self.corpus))]
-                else:
-                    payload[key] = self._mutate(random.choice(self.corpus))
+                payload[key] = self.mutate(
+                    random.choice(self.corpus)
+                )
+
         return payload
 
-    def _fuzz_worker(self, target):
-        url = ""
-        method = target["method"]
-        try:
-            path = target["path"]
-            blueprint = target["blueprint"]
+    def log_anomaly(
+        self,
+        classification,
+        status,
+        method,
+        url,
+        payload,
+        evidence,
+    ):
+        finding = {
+            "timestamp": time.strftime(
+                "%Y-%m-%d %H:%M:%S",
+                time.localtime(),
+            ),
+            "type": classification,
+            "status": status,
+            "method": method,
+            "url": url,
+            "payload": str(payload)[:200],
+            "evidence": str(evidence)[:500],
+        }
 
-            headers = {"User-Agent": random.choice(self.user_agents)}
-            time.sleep(random.uniform(0.05, 0.25))
+        with self.findings_lock:
+            self.findings.append(finding)
 
-            url = urljoin(self.base_url, path.lstrip("/"))
-            kwargs = {"timeout": 4, "headers": headers}
+        print(
+            f"[!] {classification}: {method} {url} "
+            f"(status={status})",
+            flush=True,
+        )
 
-            if method in ["POST", "PUT"]:
-                if blueprint["body_properties"]:
-                    kwargs["json"] = self._build_enterprise_payload(blueprint["body_properties"])
-                else:
-                    kwargs["json"] = {"input": self._mutate(random.choice(self.corpus))}
-                send_payload = kwargs["json"]
-            else:
-                if blueprint["query"]:
-                    chosen_param = random.choice(blueprint["query"])
-                    kwargs["params"] = {chosen_param: self._mutate(random.choice(self.corpus))}
-                else:
-                    kwargs["params"] = {"input": self._mutate(random.choice(self.corpus))}
-                send_payload = kwargs["params"]
-
-            start = time.time()
-            res = self.session.request(method, url, **kwargs)
-            self._analyze(res, time.time() - start, method, url, send_payload)
-
-        except requests.exceptions.Timeout:
-            self._log_anomaly("TIMEOUT_EXHAUSTION", 504, method, url, "TIMEOUT", "Microservice gateway limit broken.")
-        except Exception as e:
-            self._log_anomaly("CONNECTION_DROP_OR_DATA_FAULT", 0, method, url, "PAYLOAD_ERR", str(e))
-
-    def _analyze(self, response, duration, method, url, send_payload):
+    def analyze(self, response, duration, method, url, payload):
         anomalies = []
         body = response.text.lower()
 
@@ -142,130 +301,367 @@ class AdvancedBehavioralFuzzer:
         if duration > 1.5:
             anomalies.append("HIGH_LATENCY_DELAY")
 
-        indicators = ["stack trace", "exception", "nullpointer", "overflow", "fatal", "segmentation fault"]
-        for ind in indicators:
-            if ind in body:
-                anomalies.append(f"VERBOSE_LEAK_{ind.upper()}")
+        indicators = [
+            "stack trace",
+            "exception",
+            "nullpointer",
+            "overflow",
+            "fatal",
+            "segmentation fault",
+        ]
+
+        for indicator in indicators:
+            if indicator in body:
+                anomalies.append(
+                    f"VERBOSE_LEAK_{indicator.upper()}"
+                )
 
         for anomaly in anomalies:
-            self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
+            self.log_anomaly(
+                anomaly,
+                response.status_code,
+                method,
+                url,
+                payload,
+                response.text,
+            )
 
-    def _log_anomaly(self, classification, status, method, url, payload, snippet):
-        self.findings.append({
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            "type": classification,
-            "status": status,
-            "method": method,
-            "url": url,
-            "payload": str(payload)[:100],
-            "evidence": snippet.replace("<", "&lt;").replace(">", "&gt;")
-        })
+    def fuzz_worker(self, target):
+        method = target["method"]
+        path = target["path"]
+        blueprint = target["blueprint"]
+        url = urljoin(self.base_url + "/", path.lstrip("/"))
 
-    def run_fuzz_session(self, total_runs=40):
-        print(f"[*] Dispatching execution matrix across {self.max_workers} threads...")
-        self.total_requests = total_runs
+        try:
+            time.sleep(random.uniform(0.05, 0.25))
+
+            headers = {
+                "User-Agent": random.choice(self.user_agents),
+                "Accept": "application/json",
+            }
+
+            request_kwargs = {
+                "timeout": 4,
+                "headers": headers,
+            }
+
+            if method in {"POST", "PUT"}:
+                if blueprint["body_properties"]:
+                    payload = self.build_payload(
+                        blueprint["body_properties"]
+                    )
+                else:
+                    payload = {
+                        "input": self.mutate(
+                            random.choice(self.corpus)
+                        )
+                    }
+
+                request_kwargs["json"] = payload
+            else:
+                if blueprint["query"]:
+                    parameter = random.choice(blueprint["query"])
+                else:
+                    parameter = "input"
+
+                payload = {
+                    parameter: self.mutate(
+                        random.choice(self.corpus)
+                    )
+                }
+                request_kwargs["params"] = payload
+
+            start = time.time()
+            response = requests.request(
+                method,
+                url,
+                **request_kwargs,
+            )
+            duration = time.time() - start
+
+            self.analyze(
+                response,
+                duration,
+                method,
+                url,
+                payload,
+            )
+
+        except requests.exceptions.Timeout as error:
+            self.log_anomaly(
+                "TIMEOUT_EXHAUSTION",
+                504,
+                method,
+                url,
+                "TIMEOUT",
+                str(error),
+            )
+
+        except Exception as error:
+            self.log_anomaly(
+                "CONNECTION_DROP_OR_DATA_FAULT",
+                0,
+                method,
+                url,
+                "PAYLOAD_ERR",
+                repr(error),
+            )
+            traceback.print_exc()
+
+    def run_fuzz_session(self, total_runs=30):
         if not self.endpoints:
-            print("[-] No endpoints loaded. Call discover_via_spec() first or using local fallback layout.")
-            self.endpoints = [{"path": "/api/v2/secure-process", "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}}}}]
+            raise RuntimeError(
+                "No endpoints loaded. "
+                "Call discover_via_spec() first."
+            )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(self._fuzz_worker, random.choice(self.endpoints)) for _ in range(total_runs)]
-            concurrent.futures.wait(futures)
+        self.total_requests = total_runs
 
-    def generate_web_dashboard(self, report_name="fuzz_dashboard.html"):
-        full_path = f"{self.output_dir}/{report_name}"
-        print(f"Creating dashboard at: {full_path}")
+        print(
+            f"[*] Dispatching execution matrix across "
+            f"{self.max_workers} threads...",
+            flush=True,
+        )
 
-        os.makedirs(self.output_dir, exist_ok=True)
+        failures = []
 
-        html_template = f"""<!DOCTYPE html>
+        with ThreadPoolExecutor(
+            max_workers=self.max_workers
+        ) as executor:
+            futures = [
+                executor.submit(
+                    self.fuzz_worker,
+                    random.choice(self.endpoints),
+                )
+                for _ in range(total_runs)
+            ]
+
+            for future in as_completed(futures):
+                try:
+                    # Ensures unexpected worker exceptions are visible.
+                    future.result()
+                except Exception as error:
+                    failures.append(error)
+                    print(
+                        f"[-] Worker failed: {error}",
+                        flush=True,
+                    )
+                    traceback.print_exc()
+
+        if failures:
+            raise RuntimeError(
+                f"{len(failures)} worker(s) failed"
+            )
+
+    def generate_web_dashboard(self, report_name):
+        report_path = Path(report_name)
+
+        rows = []
+
+        for finding in self.findings:
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(finding['timestamp'])}</td>"
+                f"<td><strong>{html.escape(finding['type'])}</strong></td>"
+                f"<td>{html.escape(str(finding['status']))}</td>"
+                f"<td>{html.escape(finding['method'] + ' ' + finding['url'])}</td>"
+                f"<td><pre>{html.escape(finding['payload'])}</pre></td>"
+                f"<td><pre>{html.escape(finding['evidence'])}</pre></td>"
+                "</tr>"
+            )
+
+        if not rows:
+            rows.append(
+                "<tr><td colspan='6'>"
+                "No anomalies discovered."
+                "</td></tr>"
+            )
+
+        document = f"""<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Enterprise Fuzzer Telemetry Dashboard</title>
-    <style>
-        body {{ font-family: system-ui, sans-serif; background: #0b0f19; color: #94a3b8; padding: 2rem; margin: 0; }}
-        .wrapper {{ max-width: 1300px; margin: 0 auto; }}
-        header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #233554; padding-bottom: 1.5rem; margin-bottom: 2rem; }}
-        h1 {{ color: #f8fafc; margin: 0; font-size: 1.6rem; }}
-        .metrics {{ display: flex; gap: 1.5rem; margin-bottom: 2rem; }}
-        .card {{ background: #151d30; border: 1px solid #233554; border-radius: 8px; padding: 1.2rem; flex: 1; }}
-        .num {{ font-size: 2rem; font-weight: bold; color: #38bdf8; }}
-        table {{ width: 100%; border-collapse: collapse; background: #151d30; border: 1px solid #233554; border-radius: 8px; overflow: hidden; }}
-        th, td {{ padding: 1rem; text-align: left; border-bottom: 1px solid #233554; font-size: 0.9rem; }}
-        th {{ background: #0f172a; color: #f8fafc; }}
-        tr:hover td {{ background: #1c273e; }}
-        .code {{ font-family: monospace; background: #0b0f19; padding: 0.5rem; border-radius: 4px; border: 1px solid #233554; color: #cbd5e1; word-break: break-all; max-width: 350px; font-size: 0.8rem; }}
-    </style>
+<meta charset="utf-8">
+<title>Fuzzer Telemetry Dashboard</title>
+<style>
+body {{
+    font-family: system-ui, sans-serif;
+    background: #0b0f19;
+    color: #cbd5e1;
+    margin: 0;
+    padding: 32px;
+}}
+main {{
+    max-width: 1400px;
+    margin: auto;
+}}
+h1 {{
+    color: #f8fafc;
+}}
+.metrics {{
+    display: flex;
+    gap: 16px;
+    margin: 24px 0;
+}}
+.card {{
+    background: #151d30;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 20px;
+    min-width: 220px;
+}}
+.number {{
+    color: #38bdf8;
+    font-size: 32px;
+    font-weight: bold;
+}}
+table {{
+    width: 100%;
+    border-collapse: collapse;
+    background: #151d30;
+}}
+th, td {{
+    border: 1px solid #334155;
+    padding: 12px;
+    text-align: left;
+    vertical-align: top;
+}}
+th {{
+    color: #f8fafc;
+    background: #0f172a;
+}}
+pre {{
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 350px;
+}}
+strong {{
+    color: #f87171;
+}}
+</style>
 </head>
 <body>
-    <div class="wrapper">
-        <header>
-            <div>
-                <h1>🛡️ Boundary Telemetry Dashboard</h1>
-                <p style="margin: 0.3rem 0 0 0; font-size:0.85rem;">Autonomous edge-case validation report logs</p>
-            </div>
-        </header>
+<main>
+<h1>Boundary Telemetry Dashboard</h1>
 
-        <div class="metrics">
-            <div class="card"><h3>Total Scheduled Executions</h3><div class="num">{self.total_requests}</div></div>
-            <div class="card"><h3>Target Routes Extracted</h3><div class="num">{len(self.endpoints)}</div></div>
-        </div>
+<div class="metrics">
+<div class="card">
+<div>Total Requests</div>
+<div class="number">{self.total_requests}</div>
+</div>
+<div class="card">
+<div>Endpoints</div>
+<div class="number">{len(self.endpoints)}</div>
+</div>
+<div class="card">
+<div>Findings</div>
+<div class="number">{len(self.findings)}</div>
+</div>
+</div>
 
-        <h2>Behavioral Alert Streams</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Anomaly Group</th>
-                    <th>Status</th>
-                    <th>Request Context</th>
-                    <th>Payload Trigger</th>
-                    <th>Captured Evidence Window</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
-
-        if not self.findings:
-            html_template += """<tr><td colspan="6" style="text-align: center; color: #4ade80; padding: 4rem;">No boundary errors or execution crashes discovered across endpoint schemas. Target microservice validated within limits.</td></tr>"""
-        else:
-            for item in self.findings:
-                html_template += f"""
-                <tr>
-                    <td>{item['timestamp']}</td>
-                    <td><strong style="color: #f87171;">{item['type']}</strong></td>
-                    <td><code>{item['status']}</code></td>
-                    <td><span style="font-size:0.85rem; color:#e2e8f0;">{item['method']} {item['url']}</span></td>
-                    <td><div class="code">{item['payload']}</div></td>
-                    <td><div class="code" style="color: #fca5a5;">{item['evidence']}</div></td>
-                </tr>"""
-
-        html_template += """
-            </tbody>
-        </table>
-    </div>
+<table>
+<thead>
+<tr>
+<th>Time</th>
+<th>Anomaly</th>
+<th>Status</th>
+<th>Request</th>
+<th>Payload</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+{"".join(rows)}
+</tbody>
+</table>
+</main>
 </body>
-</html>"""
+</html>
+"""
 
-        with open(full_path, "w", encoding="utf-8") as f:
-            f.write(html_template)
-        print(f"[+] UI generation complete. Review findings inside '{full_path}'.")
-        return full_path
+        report_path.write_text(document, encoding="utf-8")
+        print(
+            f"[+] Dashboard written to {report_path}",
+            flush=True,
+        )
+
+
+def wait_for_server(url, timeout=10):
+    deadline = time.time() + timeout
+    last_error = None
+
+    while time.time() < deadline:
+        try:
+            response = requests.get(url, timeout=1)
+            response.raise_for_status()
+            return
+        except Exception as error:
+            last_error = error
+            time.sleep(0.2)
+
+    raise RuntimeError(
+        f"Target server did not become ready: {last_error}"
+    )
+
+
+def main():
+    print(
+        "[*] Starting Autonomous Boundary Fuzzing Pipeline...",
+        flush=True,
+    )
+
+    server = ThreadingHTTPServer(
+        (HOST, PORT),
+        MockServerHandler,
+    )
+    server_thread = threading.Thread(
+        target=server.serve_forever,
+        daemon=True,
+    )
+    server_thread.start()
+
+    fuzzer = AdvancedBehavioralFuzzer(
+        base_url=BASE_URL,
+        max_workers=5,
+    )
+
+    try:
+        wait_for_server(f"{BASE_URL}/swagger.json")
+        fuzzer.discover_via_spec(
+            f"{BASE_URL}/swagger.json"
+        )
+
+        print(
+            "[*] Launching dynamic fuzz loop wrapper "
+            "(30 iterations)...",
+            flush=True,
+        )
+
+        fuzzer.run_fuzz_session(total_runs=30)
+
+    except Exception as error:
+        print(
+            f"[-] Fuzzing pipeline failed: {error}",
+            flush=True,
+        )
+        traceback.print_exc()
+        raise
+
+    finally:
+        print(
+            "[*] Shutting down target server safely...",
+            flush=True,
+        )
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=5)
+
+    fuzzer.generate_web_dashboard(REPORT_NAME)
+
+    print(
+        "[+] Pipeline complete.",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
-    TARGET_HOST = "http://localhost:9000"
-    SPEC_URL = "http://localhost:9000/swagger.json"
-
-    fuzzer = AdvancedBehavioralFuzzer(base_url=TARGET_HOST, max_workers=5)
-    fuzzer.discover_via_spec(SPEC_URL)
-    fuzzer.run_fuzz_session(total_runs=40)
-
-    dashboard = DashboardManager(
-        output_dir="/var/reports",
-        findings=fuzzer.findings,
-        endpoints=fuzzer.endpoints,
-        total_requests=fuzzer.total_requests,
-    )
-    dashboard.generate_web_dashboard(report_name="fuzz_dashboard.html")
+    main()
