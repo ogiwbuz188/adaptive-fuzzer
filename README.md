@@ -157,8 +157,4 @@ This project is provided as-is for research and experimentation. Add your prefer
 
 ---
 
-If you want, I can also create a version with:
 
-- a more security-focused tone,
-- a cleaner startup/usage section for GitHub visitors,
-- or a README tailored specifically for open-source publication and contributor onboarding.
