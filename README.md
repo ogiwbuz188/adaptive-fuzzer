@@ -1,58 +1,164 @@
-# 🛡️ Adaptive Behavioral Fuzzer (ABF)
+# Adaptive Behavioral Fuzzer
 
-An advanced, autonomous security testing framework designed to discover memory boundaries, logic errors, and security misconfigurations in RESTful microservices without human intervention. 
+A lightweight, autonomous API fuzzing framework built to stress-test REST services, identify boundary-condition failures, and generate a human-readable security dashboard from the resulting findings.
 
-By leveraging an evolutionary genetic feedback loop, the framework dynamically mutates request layouts, bypasses network security thresholds, and profiles microsecond latency spikes before compiling everything into a self-contained web telemetry application dashboard.
+This repository combines OpenAPI/Swagger-driven route discovery, adaptive payload mutation, multi-threaded execution, and automatic HTML reporting to help surface fragile application behavior quickly.
 
----
+## Why this project exists
 
-## ✨ Features & Architecture Upgrades
-- **Zero-Config Discovery:** Automatically crawls and parses OpenAPI/Swagger specifications to build live endpoint attack matrices.
-- **Enterprise-Capable Mutations:** Recursively creates and corrupts nested JSON payloads to match complex application schemas.
-- **WAF & Rate-Limiter Evasion:** Employs user-agent header rotation and adaptive request jitter to bypass traffic blocking rules.
-- **Genetic Feedback Loop:** Feeds successful anomaly-inducing mutations back into the core seed pool to surface deep memory leaks over long sessions.
-- **Automated UI Compiler:** Generates a clean, single-page HTML dashboard summarizing exceptions and system telemetry upon completion.
+Modern APIs often fail under unexpected, malformed, oversized, or deeply nested request payloads. Traditional validation checks may miss edge cases that only appear under real traffic patterns. This project was designed to automate that discovery process by:
 
----
+- scanning API route definitions,
+- generating adversarial payloads,
+- exercising endpoints across multiple worker threads,
+- recording anomalies such as timeouts, 500s, latency spikes, and verbose error leakage,
+- producing a dashboard that summarizes the findings for review.
 
-## ⚙️ Core Engineering Mechanisms
+## Key features
 
-### 1. Attack Surface Mapping
-The engine maps out query vectors and complex request bodies (`application/json`) from local or remote Swagger definition sheets. It stores parameters alongside structural type layouts.
+- Swagger/OpenAPI-based endpoint discovery
+- Recursive JSON payload generation for structured request bodies
+- Mutation strategies for overflow, type confusion, traversal, and format abuse
+- Parallel fuzz execution using Python concurrency
+- Request logging and anomaly classification
+- HTML telemetry dashboard generation
+- CI-friendly execution via GitHub Actions
 
-### 2. Recursive Structural Mutation Engine
-Inputs undergo heavy mutation strategies targeted at systemic runtime boundaries:
-- **Type Scrambling & Confusion:** Replaces valid primitives with complex nested structures, multi-layered arrays, and invalid datatypes (`None`, `bool`, massive integers) to break deserialization filters.
-- **Memory Exceeded Overflows:** Scales variable text bounds drastically (up to 30,000+ characters) to stress string allocation buffers and trigger segmentation faults.
-- **Sanitisation Traversal:** Injects traversal indices (`../../etc/passwd`), null bytes (`\x00`), and raw script fragments to look for input validation gaps.
+## Repository structure
 
-### 3. Asynchronous Pipeline & Traffic Evasion
-The execution matrix drives traffic through high-speed, parallel worker pools using Python’s `concurrent.futures`. To prevent Web Application Firewalls (WAFs) or API Gateways from instantly banning the fuzzer's IP, every thread injects randomized millisecond timing delays (jitter) and selects a clean browser `User-Agent` identity for each request.
-
----
-
-## 🚀 Quick Start & Project Execution
-
-### 📦 Prerequisites
-Install the required HTTP library:
-```bash
-pip install requests
+```text
+adaptive-fuzzer/
+├── .github/
+│   └── workflows/
+│       └── fuzz.yml
+├── src/
+│   └── fuzzer.py
+├── tests/
+│   └── mock_server.py
+├── run_test.py
+├── requirements.txt
+├── README.md
+└── mock_server_dashboard.html   # generated after running the pipeline
 ```
 
-### 🛠️ Configuration & Customization
-To point the fuzzer at your own targets, open `src/fuzzer.py` and modify the configuration block at the bottom of the file:
+## Getting started
 
-* **`TARGET_HOST`**: Set this to your local server (`http://localhost:9000`) or your remote staging microservice URL.
-* **`SPEC_URL`**: Provide the URL or local file path to the OpenAPI/Swagger JSON definition sheet.
-* **`ENTERPRISE_TOKEN`**: Pass your authorization session string here (e.g., Bearer JWT tokens) if testing a secure endpoint. Pass `None` if the API is public.
+### Prerequisites
 
-### 💻 Running the Fuzzer
-Run the orchestrated pipeline runner (which handles starting the test server and the fuzzer together):
+- Python 3.11+
+- pip
+
+### Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run the fuzzer
+
 ```bash
 python run_test.py
 ```
 
-### 📊 Inspecting Telemetry Results
-Once the session completes, double-click the newly generated `fuzz_dashboard.html` file in your root folder. It will load an interactive single-page diagnostics UI directly in any web browser to let you easily audit systemic vulnerabilities, uncaught 500 crashes, and latency alerts.
+This launches the local mock API server, discovers the `/api/v1/process` route, runs the fuzzing session, and generates a telemetry dashboard.
 
+## What the pipeline does
 
+`run_test.py` orchestrates the full testing flow:
+
+1. Finds test server scripts under `tests/`
+2. Extracts a route from the target server schema
+3. Starts the local HTTP server
+4. Configures the fuzzer with the discovered endpoint
+5. Runs concurrent mutation-based requests
+6. Captures anomalies and status codes
+7. Saves the HTML dashboard report
+
+## Fuzzing behavior
+
+The fuzzer creates structured and adversarial inputs by mutating JSON fields based on the endpoint’s expected schema. Example mutation types include:
+
+- oversized strings
+- nested objects and arrays
+- invalid scalar types
+- traversal payloads such as `../etc/passwd`
+- format-string payloads
+- boundary-condition keywords that trigger error leakage
+
+This helps identify responses that reveal implementation weaknesses, high latency conditions, or service instability.
+
+## Output and reporting
+
+After the run completes, the project generates a dashboard such as:
+
+```text
+mock_server_dashboard.html
+```
+
+The dashboard includes:
+
+- total request volume,
+- route coverage,
+- anomaly classifications,
+- HTTP status details,
+- payload samples,
+- evidence snippets from server responses.
+
+## GitHub Actions workflow
+
+The repository includes a workflow in `.github/workflows/fuzz.yml` to automate the fuzzing run in CI.
+
+The workflow:
+
+- checks out the repository,
+- sets up Python 3.11,
+- installs dependencies,
+- executes `python run_test.py`,
+- uploads the generated dashboard as an artifact.
+
+This helps ensure that fuzzing checks remain part of the automated validation pipeline.
+
+## Project components
+
+### `run_test.py`
+
+Entry point for the full execution pipeline. It boots the mock server, wires in the fuzzer, sets the route, runs the test session, and saves the generated report.
+
+### `src/fuzzer.py`
+
+Contains the core logic for:
+
+- Swagger route parsing,
+- mutation generation,
+- payload construction,
+- concurrent request execution,
+- anomaly analysis,
+- dashboard generation.
+
+### `tests/mock_server.py`
+
+A deliberately vulnerable mock service used to validate the fuzzer against common attack patterns and boundary failures.
+
+## Example usage
+
+```bash
+python run_test.py
+```
+
+Then open the generated HTML report in a browser to inspect the results.
+
+## Notes
+
+This repository is intended for security research, controlled API testing, and educational use in simulated or local environments. Always validate on systems you own or are explicitly authorized to test.
+
+## License
+
+This project is provided as-is for research and experimentation. Add your preferred license here if you plan to distribute it publicly.
+
+---
+
+If you want, I can also create a version with:
+
+- a more security-focused tone,
+- a cleaner startup/usage section for GitHub visitors,
+- or a README tailored specifically for open-source publication and contributor onboarding.
