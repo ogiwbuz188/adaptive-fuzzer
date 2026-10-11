@@ -29,26 +29,33 @@ def main():
         print("[-] No test servers discovered inside the tests/ directory folder.")
         return
         
+    print(f"[+] Discovered {len(test_servers)} unique test environments to profile.")
+    
     for server_file in sorted(test_servers):
         print("\n" + "="*70)
         print(f"[*] AUTONOMOUS EXECUTION: Booting up target script -> {server_file}")
         print("="*70)
         
-        # Reset engine logs so reports don't bleed into each other
+        # Reset engine logs so reports stay separated
         fuzzer.findings = []
         
         dynamic_path = extract_target_path(server_file)
         print(f"[+] Dynamically mapped target route: {dynamic_path}")
         
-        # Set explicitly matched names and configurations
-        if "v2" in dynamic_path:
+        # Configure endpoints dynamically based on the discovered API layout version
+        if "v3" in dynamic_path:
+            fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"auth_metadata": {"type": "object"}, "transaction_payload": {"type": "object"}, "compliance_checksum": {"type": "string"}}}}}]
+            runs = 50
+        elif "v2" in dynamic_path:
             fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data_chunk": {"type": "string"}, "user_profile": {"type": "object"}, "transaction_id": {"type": "integer"}}}}]
             runs = 50
-            report_name = "vulnerable_complex_server_dashboard.html"
         else:
-            fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}}]
+            fuzzer.endpoints = [{"path": dynamic_path, "method": "POST", "blueprint": {"query": [], "body_properties": {"data": {"type": "string"}}}} ]
             runs = 30
-            report_name = "mock_server_dashboard.html"
+
+        # Create an independent clean string filename matching the server prefix
+        file_prefix = os.path.splitext(os.path.basename(server_file))[0]
+        report_name = f"{file_prefix}_dashboard.html"
 
         # Spin up the target server process
         server_proc = subprocess.Popen([sys.executable, server_file])
@@ -68,7 +75,7 @@ def main():
         fuzzer.generate_web_dashboard(report_name=report_name)
         time.sleep(2)
         
-    print("\n[+] Pipeline Complete! Isolated reports successfully compiled.")
+    print("\n[+] Pipeline Complete! All isolated reports successfully compiled.")
 
 if __name__ == "__main__":
     main()
