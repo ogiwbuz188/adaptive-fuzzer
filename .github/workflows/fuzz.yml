@@ -1,22 +1,48 @@
+
 name: Automated Boundary Fuzzing
 
-on: [push]
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   fuzz-test:
+    name: Execute Autonomous Multi-Target Fuzz Matrix
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - name: Checkout Code Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python Environment
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    - name: Run Tests
+        cache: 'pip'
+
+    - name: Install Environment Dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
+
+    - name: Execute Autonomous Fuzzing Loop
+      run: |
         python run_test.py
-    - name: Save Report
+
+    - name: Compile Analytical Telemetry Paper Charts
+      if: always()
+      run: |
+        python notebooks/generate_plots.py
+
+    - name: Archive All Generated Telemetry Reports & Visual Charts
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: fuzzer-telemetry-reports
-        path: "*_dashboard.html"
+        path: |
+          *_dashboard.html
+          notebooks/*.png
+          data/*.csv
+        retention-days: 7
