@@ -16,6 +16,7 @@ import string
 import threading
 import time
 import traceback
+import html
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
