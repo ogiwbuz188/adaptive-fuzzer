@@ -10,6 +10,8 @@
 #"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific
 #language governing permissions and limitations under the License.
 
+import os
+import csv
 import json
 import random
 import string
@@ -591,6 +593,28 @@ strong {{
 """
 
         report_path.write_text(document, encoding="utf-8")
+        os.makedirs("data", exist_ok=True)
+        csv_file_path = os.path.join("data", "test_runs.csv")
+        file_exists = os.path.exists(csv_file_path)
+        
+        try:
+            with open(csv_file_path, mode="a", newline="", encoding="utf-8") as csv_file:
+                writer = csv.writer(csv_file)
+                if not file_exists:
+                    writer.writerow(["Time", "Anomaly Group", "Status", "Context Route", "Payload Trigger"])
+                
+                for item in self.findings:
+                    writer.writerow([
+                        item['timestamp'], 
+                        item['type'], 
+                        item['status'], 
+                        f"{item['method']} {item['url']}", 
+                        item['payload']
+                    ])
+            print(f"[+] Data telemetry sheet dynamically appended inside '{csv_file_path}'")
+        except Exception as csv_err:
+            print(f"[-] CSV file logging engine trace dropped: {str(csv_err)}")
+
         print(
             f"[+] Dashboard written to {report_path}",
             flush=True,
