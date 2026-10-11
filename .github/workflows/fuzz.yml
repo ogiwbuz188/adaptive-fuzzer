@@ -31,10 +31,7 @@ jobs:
       run: |
         python run_test.py
 
-    - name: Compile Analytical Telemetry Paper Charts
-      if: always()
-      run: |
-        python notebooks/generate_plots.py
+   
 
     - name: Archive All Generated Telemetry Reports & Visual Charts
       uses: actions/upload-artifact@v4
