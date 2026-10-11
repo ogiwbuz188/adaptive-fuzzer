@@ -114,7 +114,7 @@ This means if you add a new server file under `tests/`, you do not need to modif
 
 ## Adding a new test server file
 
-Create a new Python file under `tests/`, for example:
+Create a new Python file which you want to test under `tests/`, for example:
 
 ```python
 # tests/new_api_server.py
@@ -219,9 +219,7 @@ This directory contains mock or real test API servers used for local validation 
 
 This project is intended for controlled testing in local environments, lab environments, or systems you own or are explicitly authorized to test. Use it responsibly and only against environments where you have the right to assess security behavior.
 
-## License
 
-Use the license that fits your project. If you plan to distribute it publicly, add an appropriate license file and update this section accordingly.
 
 ---
 
