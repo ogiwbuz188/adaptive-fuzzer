@@ -1,27 +1,29 @@
 # Adaptive Behavioral Fuzzer
 
-A lightweight, autonomous API fuzzing framework built to stress-test REST services, identify boundary-condition failures, and generate a human-readable security dashboard from the resulting findings.
+A lightweight, autonomous API fuzzing engine designed to stress-test REST services, identify boundary-condition failures, and generate human-readable telemetry dashboards from the results.
 
-This repository combines OpenAPI/Swagger-driven route discovery, adaptive payload mutation, multi-threaded execution, and automatic HTML reporting to help surface fragile application behavior quickly.
+This repository combines dynamic route discovery, adaptive payload generation, multi-threaded execution, and automated HTML reporting to help uncover fragile application behavior quickly and reliably.
 
 ## Why this project exists
 
-Modern APIs often fail under unexpected, malformed, oversized, or deeply nested request payloads. Traditional validation checks may miss edge cases that only appear under real traffic patterns. This project was designed to automate that discovery process by:
+Modern APIs often fail under unexpected, malformed, oversized, nested, or hostile payloads. Traditional validation may miss edge cases that only appear under real traffic patterns. This project helps surface those failures by:
 
-- scanning API route definitions,
-- generating adversarial payloads,
-- exercising endpoints across multiple worker threads,
-- recording anomalies such as timeouts, 500s, latency spikes, and verbose error leakage,
-- producing a dashboard that summarizes the findings for review.
+- scanning test server scripts in the `tests/` directory,
+- extracting the relevant API route automatically,
+- building payloads that trigger boundary and type confusion issues,
+- exercising the endpoint repeatedly under a fuzzing workflow,
+- capturing anomalies such as timeouts, 500 responses, latency spikes, and debug leakage,
+- producing a dashboard summarizing the findings for review.
 
 ## Key features
 
-- Swagger/OpenAPI-based endpoint discovery
-- Recursive JSON payload generation for structured request bodies
-- Mutation strategies for overflow, type confusion, traversal, and format abuse
-- Parallel fuzz execution using Python concurrency
-- Request logging and anomaly classification
-- HTML telemetry dashboard generation
+- automatic discovery of test server scripts under `tests/`
+- dynamic route extraction from server implementations
+- API-version-aware payload schema selection (`v1`, `v2`, `v3`, and fallback behavior)
+- multi-target execution across multiple Python test files
+- request mutation strategies for oversized or malformed inputs
+- concurrency-driven fuzzing execution
+- HTML telemetry report generation per discovered test file
 - CI-friendly execution via GitHub Actions
 
 ## Repository structure
@@ -38,123 +40,196 @@ adaptive-fuzzer/
 ├── run_test.py
 ├── requirements.txt
 ├── README.md
-└── mock_server_dashboard.html   # generated after running the pipeline
+└── *_dashboard.html   # generated artifacts after execution
 ```
 
-## Getting started
-
-### Prerequisites
+## Prerequisites
 
 - Python 3.11+
 - pip
+- Git
 
-### Install dependencies
+## Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Run the fuzzer
+## How to run the fuzzing engine
+
+From the repository root:
 
 ```bash
 python run_test.py
 ```
 
-This launches the local mock API server, discovers the `/api/v1/process` route, runs the fuzzing session, and generates a telemetry dashboard.
+This script:
 
-## What the pipeline does
+1. Finds all Python files under `tests/`
+2. Reads each test server to locate the target route
+3. Starts the target script locally
+4. Builds the correct endpoint configuration dynamically
+5. Executes the fuzzing loop against that target
+6. Saves a per-file telemetry report like `servername_dashboard.html`
 
-`run_test.py` orchestrates the full testing flow:
+## How the auto-discovery works
 
-1. Finds test server scripts under `tests/`
-2. Extracts a route from the target server schema
-3. Starts the local HTTP server
-4. Configures the fuzzer with the discovered endpoint
-5. Runs concurrent mutation-based requests
-6. Captures anomalies and status codes
-7. Saves the HTML dashboard report
+The upgraded `run_test.py` no longer depends on hardcoded `if "v3" ... elif "v2" ...` logic. Instead, it does this automatically:
 
-## Fuzzing behavior
+- checks every `.py` file in `tests/`
+- extracts the endpoint string from the test file
+- identifies the API version from the route (for example `/api/v2/...`)
+- chooses the right request schema for that version
+- configures the fuzzer automatically
 
-The fuzzer creates structured and adversarial inputs by mutating JSON fields based on the endpoint’s expected schema. Example mutation types include:
+Example logic:
 
-- oversized strings
-- nested objects and arrays
-- invalid scalar types
-- traversal payloads such as `../etc/passwd`
-- format-string payloads
-- boundary-condition keywords that trigger error leakage
+```python
+def get_api_version(path):
+    match = re.search(r"/api/(v\d+)/", path)
+    return match.group(1) if match else "v1"
+```
 
-This helps identify responses that reveal implementation weaknesses, high latency conditions, or service instability.
+Then the script maps that version to a payload template:
 
-## Output and reporting
+```python
+schemas = {
+    "v3": {
+        "auth_metadata": {"type": "object"},
+        "transaction_payload": {"type": "object"},
+        "compliance_checksum": {"type": "string"},
+    },
+    "v2": {
+        "data_chunk": {"type": "string"},
+        "user_profile": {"type": "object"},
+        "transaction_id": {"type": "string"},
+    },
+    "v1": {
+        "data": {"type": "string"},
+    },
+}
+```
 
-After the run completes, the project generates a dashboard such as:
+This means if you add a new server file under `tests/`, you do not need to modify `run_test.py` again just to support it.
+
+## Adding a new test server file
+
+Create a new Python file under `tests/`, for example:
+
+```python
+# tests/new_api_server.py
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route('/api/v3/process', methods=['POST'])
+def process_request():
+    payload = request.get_json(silent=True) or {}
+    return jsonify({"status": "ok", "received": payload})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=9000)
+```
+
+Then run:
+
+```bash
+python run_test.py
+```
+
+The engine will automatically detect the file, extract `/api/v3/process`, build a matching endpoint configuration, and generate a report for that file.
+
+## Output artifacts
+
+Each discovered test file produces its own HTML dashboard report, like:
 
 ```text
 mock_server_dashboard.html
+new_api_server_dashboard.html
 ```
 
-The dashboard includes:
+These reports include:
 
-- total request volume,
-- route coverage,
-- anomaly classifications,
-- HTTP status details,
-- payload samples,
-- evidence snippets from server responses.
+- request totals
+- discovered route information
+- HTTP status results
+- failure patterns and anomaly classes
+- payload samples and evidence snippets
 
-## GitHub Actions workflow
+## GitHub Actions integration
 
-The repository includes a workflow in `.github/workflows/fuzz.yml` to automate the fuzzing run in CI.
+This repository includes a CI workflow in `.github/workflows/fuzz.yml`:
 
-The workflow:
+```yaml
+name: Automated Boundary Fuzzing
 
-- checks out the repository,
-- sets up Python 3.11,
-- installs dependencies,
-- executes `python run_test.py`,
-- uploads the generated dashboard as an artifact.
+on: [push]
 
-This helps ensure that fuzzing checks remain part of the automated validation pipeline.
+jobs:
+  fuzz-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run Tests
+        run: |
+          pip install -r requirements.txt
+          python run_test.py
+      - name: Save Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzzer-telemetry-reports
+          path: "*_dashboard.html"
+```
+
+This allows telemetry reports to be uploaded as GitHub Actions artifacts for review.
 
 ## Project components
 
 ### `run_test.py`
 
-Entry point for the full execution pipeline. It boots the mock server, wires in the fuzzer, sets the route, runs the test session, and saves the generated report.
+This is the orchestration entry point. It:
+
+- discovers test targets,
+- extracts endpoint routes,
+- starts the target server,
+- configures the fuzzer,
+- runs the fuzz session,
+- exports the HTML dashboard.
 
 ### `src/fuzzer.py`
 
-Contains the core logic for:
+This contains the core fuzzing logic, including:
 
-- Swagger route parsing,
-- mutation generation,
-- payload construction,
-- concurrent request execution,
-- anomaly analysis,
+- request generation,
+- mutation strategies,
+- endpoint handling,
+- concurrency execution,
+- anomaly detection,
 - dashboard generation.
 
-### `tests/mock_server.py`
+### `tests/`
 
-A deliberately vulnerable mock service used to validate the fuzzer against common attack patterns and boundary failures.
-
-## Example usage
-
-```bash
-python run_test.py
-```
-
-Then open the generated HTML report in a browser to inspect the results.
+This directory contains mock or real test API servers used for local validation and telemetry generation.
 
 ## Notes
 
-This repository is intended for security research, controlled API testing, and educational use in simulated or local environments. Always validate on systems you own or are explicitly authorized to test.
+This project is intended for controlled testing in local environments, lab environments, or systems you own or are explicitly authorized to test. Use it responsibly and only against environments where you have the right to assess security behavior.
 
 ## License
 
-This project is provided as-is for research and experimentation. Add your preferred license here if you plan to distribute it publicly.
+Use the license that fits your project. If you plan to distribute it publicly, add an appropriate license file and update this section accordingly.
 
 ---
 
+Quick usage summary:
 
+```bash
+pip install -r requirements.txt
+python run_test.py
+```
+
+Then open the generated `*_dashboard.html` file to inspect the results.
