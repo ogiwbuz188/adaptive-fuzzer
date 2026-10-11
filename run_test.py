@@ -13,6 +13,7 @@
 import os
 import glob
 import subprocess
+import html
 import time
 import sys
 import re
