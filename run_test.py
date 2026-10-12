@@ -21,7 +21,7 @@ from src.fuzzer import AdvancedBehavioralFuzzer
 
 
 def extract_target_path(file_path):
-    """Extract the API endpoint path from a test server file."""
+    """Extract the API endpoint path from a research benchmark file."""
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -42,7 +42,7 @@ def get_api_version(path):
 def build_endpoint_config(dynamic_path):
     """
     Dynamically build endpoint configuration based on API version.
-    This removes the need to edit run_test.py whenever a new test file is added.
+    This removes the need to edit run_test.py whenever a new benchmark file is added.
     
     Returns: (endpoint_list, num_runs, api_version)
     """
@@ -85,14 +85,15 @@ def main():
 
     fuzzer = AdvancedBehavioralFuzzer(base_url="http://localhost:9000", max_workers=5)
 
-    search_pattern = os.path.join("tests", "*.py")
-    test_servers = glob.glob(search_pattern)
+    # Recursively search for all Python files in research_benchmark and its subdirectories
+    search_pattern = os.path.join("research_benchmark", "**", "*.py")
+    test_servers = glob.glob(search_pattern, recursive=True)
 
     if not test_servers:
-        print("[-] No test servers discovered inside the tests/ directory folder.")
+        print("[-] No benchmark servers discovered inside the research_benchmark/ directory.")
         return
 
-    print(f"[+] Discovered {len(test_servers)} unique test environments to profile.")
+    print(f"[+] Discovered {len(test_servers)} unique research benchmark environments to profile.")
 
     for server_file in sorted(test_servers):
         print("\n" + "=" * 70)

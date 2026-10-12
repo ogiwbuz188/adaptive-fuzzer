@@ -1,14 +1,16 @@
 # Adaptive Behavioral Fuzzer
 
-A lightweight, autonomous API fuzzing engine designed to stress-test REST services, identify boundary-condition failures, and generate human-readable telemetry dashboards and analytics from the results.
+A lightweight, autonomous API fuzzing engine designed to stress-test REST services, identify boundary-condition failures, and generate human-readable telemetry dashboards and analytics from the resulting findings.
 
-This repository combines dynamic route discovery, adaptive payload generation, multi-threaded execution, automated HTML reporting, CSV telemetry capture, and GitHub Actions integration to help uncover fragile API behavior quickly and reliably.
+This repository combines dynamic route discovery, adaptive payload generation, multi-threaded execution, automated HTML reporting, CSV telemetry capture, and GitHub Actions integration to help uncover edge-case vulnerabilities in benchmark services.
 
 ## Why this project exists
 
-Modern APIs often fail under unexpected, malformed, oversized, nested, or hostile payloads. Traditional validation may miss edge cases that only appear under realistic traffic patterns or concurrency pressure. This project helps surface those flaws early by:
+Modern APIs often fail under unexpected, malformed, oversized, nested, or hostile payloads. Traditional validation may miss edge cases that only appear under realistic traffic patterns or concurrent use.
 
-- scanning test server scripts in the `tests/` directory,
+This project helps by:
+
+- scanning benchmark server scripts in the `research_benchmark/` directory,
 - extracting the relevant API route automatically,
 - building payloads that trigger boundary and type-confusion issues,
 - exercising the endpoint repeatedly under a fuzzing workflow,
@@ -17,19 +19,20 @@ Modern APIs often fail under unexpected, malformed, oversized, nested, or hostil
 
 ## What is now included
 
-The project has grown beyond a simple single-target fuzzer and now includes:
+The project includes:
 
-- multi-target execution across multiple Python test environments,
+- multi-target execution across multiple Python benchmark environments,
 - automatic route extraction from server files,
 - API-version-aware payload generation (`v1`, `v2`, `v3`),
 - telemetry CSV export for analytics,
-- chart generation via `notebook/generate_plots.py`,
+- chart generation via `notebooks/generate_plots.py`,
 - GitHub Actions automation for CI execution and artifact uploads,
 - HTML dashboards and PNG analysis charts for visual review.
 
 ## Key features
 
-- automatic discovery of test server scripts under `tests/`
+- automatic discovery of benchmark server scripts under `research_benchmark/`
+- recursive scanning of nested benchmark subdirectories
 - dynamic route extraction from server implementations
 - API-version-aware payload schema selection (`v1`, `v2`, `v3`, and fallback behavior)
 - multi-target execution across multiple Python endpoints
@@ -49,19 +52,22 @@ adaptive-fuzzer/
 │       └── fuzz.yml
 ├── data/
 │   └── test_runs.csv            # generated telemetry export
-├── notebook/
+├── notebooks/
 │   └── generate_plots.py        # analytics and chart generation
 ├── src/
 │   └── fuzzer.py                # core fuzzing engine
-├── tests/
-│   ├── bank_server.py           # multi-vulnerability banking service target
+├── research_benchmark/
+│   ├── input_validation_failure/
+│   │   └── missing_type_casts.py
+│   ├── memory_safety/
+│   │   └── ...
 │   └── ...
 ├── requirements.txt
 ├── run_test.py                  # orchestration entry point
 ├── README.md
 ├── *_dashboard.html             # generated HTML dashboards
-├── notebooks/                   # generated PNG chart outputs
-└── LICENSE.md
+├── LICENSE.md
+└── notebooks/                   # generated PNG chart outputs
 ```
 
 ## Prerequisites
@@ -86,8 +92,8 @@ python run_test.py
 
 This script:
 
-1. Finds all Python files under `tests/`
-2. Reads each test server to locate the target route
+1. Finds all Python files under `research_benchmark/` recursively
+2. Reads each benchmark server to locate the target route
 3. Starts the target script locally
 4. Builds the correct endpoint configuration dynamically
 5. Executes the fuzzing loop against that target
@@ -98,8 +104,8 @@ This script:
 
 The `run_test.py` workflow no longer depends on hardcoded branch logic for each target type. Instead, it does this automatically:
 
-- checks every `.py` file in `tests/`
-- extracts the endpoint string from the test file
+- checks every `.py` file in `research_benchmark/` and nested folders
+- extracts the endpoint string from the benchmark file
 - identifies the API version from the route (for example `/api/v3/...`)
 - selects the right request schema for that version
 - configures the fuzzer automatically
@@ -132,14 +138,14 @@ schemas = {
 }
 ```
 
-This means if you add a new server file under `tests/`, you do not need to modify `run_test.py` again just to support it.
+This means if you add a new server file under `research_benchmark/` or any subdirectory, you do not need to modify `run_test.py` again just to support it.
 
-## Adding a new test server file
+## Adding a new benchmark file
 
-Create a new Python file under `tests/`, for example:
+Create a new Python file under `research_benchmark/` or in a nested subdirectory, for example:
 
 ```python
-# tests/new_api_server.py
+# research_benchmark/new_category/new_api_server.py
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -163,11 +169,11 @@ The engine will automatically detect the file, extract `/api/v3/process`, build 
 
 ## Telemetry outputs
 
-Each discovered test file produces its own HTML dashboard report, like:
+Each discovered benchmark file produces its own HTML dashboard report, like:
 
 ```text
-mock_server_dashboard.html
-bank_server_dashboard.html
+missing_type_casts_dashboard.html
+memory_guard_dashboard.html
 new_api_server_dashboard.html
 ```
 
@@ -183,7 +189,7 @@ In addition, the system appends structured findings to `data/test_runs.csv` for 
 
 ## Analytics and chart generation
 
-The repository includes a plotting script at `notebook/generate_plots.py` to convert captured telemetry into visual summaries.
+The repository includes a plotting script at `notebooks/generate_plots.py` to convert captured telemetry into visual summaries.
 
 This script reads `data/test_runs.csv` and creates charts such as:
 
@@ -194,14 +200,14 @@ This script reads `data/test_runs.csv` and creates charts such as:
 Example usage:
 
 ```bash
-python notebook/generate_plots.py
+python notebooks/generate_plots.py
 ```
 
 The script writes PNG files into the `notebooks/` directory, which are then suitable for artifact storage and shareable reports.
 
 ## GitHub Actions integration
 
-This repository includes a CI workflow in `.github/workflows/fuzz.yml` that runs the fuzzer, generates telemetry, and archives the outputs.
+The CI workflow in `.github/workflows/fuzz.yml` runs the fuzzer, generates telemetry, and archives the outputs.
 
 ```yaml
 name: Automated Boundary Fuzzing
@@ -239,7 +245,7 @@ jobs:
     - name: Compile Analytical Telemetry Paper Charts
       if: always()
       run: |
-        python notebook/generate_plots.py
+        python notebooks/generate_plots.py
 
     - name: Archive All Generated Telemetry Reports & Visual Charts
       uses: actions/upload-artifact@v4
@@ -261,7 +267,7 @@ This allows telemetry reports and plots to be uploaded as GitHub Actions artifac
 
 This is the orchestration entry point. It:
 
-- discovers test targets,
+- discovers benchmark targets,
 - extracts endpoint routes,
 - starts the target server,
 - configures the fuzzer,
@@ -281,13 +287,13 @@ This contains the core fuzzing logic, including:
 - dashboard generation,
 - CSV export generation.
 
-### `notebook/generate_plots.py`
+### `notebooks/generate_plots.py`
 
 This handles analytical chart generation from the telemetry dataset.
 
-### `tests/`
+### `research_benchmark/`
 
-This directory contains mock or real test API servers used for local validation and telemetry generation.
+This directory contains benchmark API servers used for local validation and telemetry generation.
 
 ## Example anomaly classes detected
 
@@ -302,7 +308,7 @@ The fuzzer can surface issues such as:
 
 ## Notes
 
-This project is intended for controlled testing in local environments, lab environments, or systems you own or are explicitly authorized to test. Use it responsibly and only against environments you are permitted to evaluate.
+This project is intended for controlled testing in local environments, lab environments, or systems you own or are explicitly authorized to test. Use it responsibly and only against environments you are permitted to assess.
 
 ---
 
@@ -311,7 +317,7 @@ Quick usage summary:
 ```bash
 pip install -r requirements.txt
 python run_test.py
-python notebook/generate_plots.py
+python notebooks/generate_plots.py
 ```
 
 Then open the generated `*_dashboard.html` file or inspect the generated PNG charts in `notebooks/` to review the results.
