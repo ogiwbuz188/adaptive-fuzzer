@@ -19,6 +19,8 @@ import threading
 import time
 import traceback
 import html
+import math
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -135,6 +137,10 @@ class AdvancedBehavioralFuzzer:
         self.total_requests = 0
         self.findings_lock = threading.Lock()
 
+        # Baselines collected at discovery time so anomalies are relative
+        # to the target's normal behavior instead of exact bug signatures.
+        self.baselines = {}
+
         self.user_agents = [
             (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -212,6 +218,48 @@ class AdvancedBehavioralFuzzer:
             f"Tracked {len(self.endpoints)} route(s).",
             flush=True,
         )
+
+        # Warm up each endpoint to establish behavioral baselines. This is
+        # important so the fuzzer flags symptoms (unexpected status, huge
+        # change in response size, latency spikes) even when the bug itself
+        # is previously unknown.
+        for ep in self.endpoints:
+            url = urljoin(self.base_url + "/", ep["path"].lstrip("/"))
+            method = ep["method"]
+            blueprint = ep["blueprint"]
+
+            try:
+                headers = {"User-Agent": random.choice(self.user_agents)}
+                if method in {"POST", "PUT"}:
+                    if blueprint["body_properties"]:
+                        payload = self.build_payload(blueprint["body_properties"])
+                    else:
+                        payload = {"input": "warmup"}
+                    r = requests.request(method, url, json=payload, timeout=3, headers=headers)
+                else:
+                    params = {}
+                    if blueprint["query"]:
+                        params[blueprint["query"][0]] = "warmup"
+                    r = requests.request(method, url, params=params, timeout=3, headers=headers)
+
+                status_counter = Counter([r.status_code])
+                content_len = len(r.content or b"")
+                avg_len = content_len
+                content_types = {r.headers.get("Content-Type", "").split(";")[0].strip()}
+
+                self.baselines[(method, ep["path"])]= {
+                    "status_counter": status_counter,
+                    "avg_len": avg_len,
+                    "content_types": content_types,
+                }
+            except Exception:
+                # If warmup fails, store a minimal baseline so we can detect
+                # future connection drops / crashes as anomalies.
+                self.baselines[(method, ep["path"])]= {
+                    "status_counter": Counter(),
+                    "avg_len": 0,
+                    "content_types": set(),
+                }
 
     def mutate(self, seed):
         strategy = random.choice(
@@ -303,35 +351,94 @@ class AdvancedBehavioralFuzzer:
             flush=True,
         )
 
-        def _analyze(self, response, duration, method, url, send_payload):
+    def analyze(self, response, duration, method, url, send_payload):
+        """Analyze an HTTP response for symptomatic indicators of crashes or
+        unexpected behavior. This is intentionally generic — the fuzzer
+        looks for symptoms (high latency, 5xx, unusual response sizes,
+        traces, binary blobs, abrupt closes) rather than a database of
+        known bug signatures.
+        """
         anomalies = []
-        body = response.text.lower()
-        
-        # 1. Expand Status Code Groups
-        if response.status_code == 500:
+
+        # Normalize body for textual checks but keep raw for evidence
+        try:
+            body = (response.text or "").lower()
+        except Exception:
+            body = ""
+
+        status = response.status_code
+
+        # 1. Status-based symptoms
+        if status >= 500:
             anomalies.append("500_INTERNAL_SERVER_ERROR")
-        elif response.status_code == 413:
+        elif status == 413:
             anomalies.append("413_PAYLOAD_TOO_LARGE")
-        elif response.status_code == 429:
-            anomalies.append("429_RATE_LIMIT_LOCK") # New Group!
-            
+        elif status == 429:
+            anomalies.append("429_RATE_LIMIT_LOCK")
+
+        # 2. Latency symptom
         if duration > 1.5:
             anomalies.append("HIGH_LATENCY_DELAY")
-            
-        # 2. Dynamic Text Parsing - Split into precise anomaly groups!
-        if "typeerror" in body:
-            anomalies.append("CRITICAL_TYPE_CONFUSION") # New Group!
-        if "overflowexception" in body or "stack overflow" in body:
-            anomalies.append("MEMORY_BOUNDARY_OVERFLOW") # New Group!
-        if "sqlite3exception" in body or "sqlgrammarexception" in body:
-            anomalies.append("DATABASE_INJECTION_LEAK") # New Group!
-        if "filenotfoundexception" in body:
-            anomalies.append("PATH_TRAVERSAL_EXPOSURE") # New Group!
 
-        for anomaly in anomalies:
-            self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
-     
-       
+        # 3. Response size anomalies relative to baseline
+        baseline = self.baselines.get((method, url.replace(self.base_url, "")))
+        if baseline:
+            avg = baseline.get("avg_len", 0)
+            cur_len = len(response.content or b"")
+            # If baseline exists and current length deviates drastically -> symptom
+            if avg > 0 and (cur_len > avg * 3 or cur_len < max(1, avg // 10)):
+                anomalies.append("RESPONSE_SIZE_ANOMALY")
+
+            # Content-Type deviation
+            ctype = response.headers.get("Content-Type", "").split(";")[0].strip()
+            if baseline.get("content_types") and ctype not in baseline.get("content_types"):
+                anomalies.append("CONTENTTYPE_MISMATCH")
+        else:
+            # No baseline — use heuristic sizes and binary content checks
+            cur_len = len(response.content or b"")
+            if cur_len == 0:
+                anomalies.append("EMPTY_RESPONSE_BODY")
+            elif cur_len > 200000:
+                anomalies.append("UNEXPECTED_LARGE_RESPONSE")
+
+        # 4. Textual traces and crash markers (generic symptom matching)
+        crash_markers = [
+            "segmentation fault",
+            "stack overflow",
+            "nullpointerexception",
+            "null pointer exception",
+            "traceback",
+            "exception",
+            "fatal",
+            "panic:",
+            "core dumped",
+            "oom",
+            "outofmemory",
+            "memoryerror",
+        ]
+
+        for marker in crash_markers:
+            if marker in body:
+                anomalies.append("STACK_OR_FATAL_TRACE")
+                break
+
+        # 5. Binary or truncated responses where text expected
+        ctype = response.headers.get("Content-Type", "").lower()
+        if "application/json" in ctype:
+            # Try to parse json — if it fails and body is non-empty, suspicious
+            try:
+                response.json()
+            except Exception:
+                anomalies.append("MALFORMED_JSON_RESPONSE")
+        else:
+            # If response advertises text but contains null bytes or non-text, mark it
+            if ("text" in ctype or "html" in ctype or ctype == "") and b"\x00" in (response.content or b""):
+                anomalies.append("BINARY_IN_TEXT_RESPONSE")
+
+        # 6. If any anomaly discovered, attach evidence and surface it
+        for anomaly in set(anomalies):
+            evidence = response.text[:1000] if hasattr(response, "text") else b""
+            self.log_anomaly(anomaly, status, method, url, send_payload, evidence)
 
     def fuzz_worker(self, target):
         method = target["method"]
@@ -386,6 +493,7 @@ class AdvancedBehavioralFuzzer:
             )
             duration = time.time() - start
 
+            # Analyze response for symptomatic indications of failure
             self.analyze(
                 response,
                 duration,
@@ -402,6 +510,17 @@ class AdvancedBehavioralFuzzer:
                 url,
                 "TIMEOUT",
                 str(error),
+            )
+
+        except requests.exceptions.ConnectionError as error:
+            # Connection errors are strong signals of crashes / process exits
+            self.log_anomaly(
+                "CONNECTION_REFUSED_OR_RESET",
+                0,
+                method,
+                url,
+                "CONN_ERR",
+                repr(error),
             )
 
         except Exception as error:
