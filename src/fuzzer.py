@@ -303,42 +303,35 @@ class AdvancedBehavioralFuzzer:
             flush=True,
         )
 
-    def analyze(self, response, duration, method, url, payload):
+        def _analyze(self, response, duration, method, url, send_payload):
         anomalies = []
         body = response.text.lower()
-
+        
+        # 1. Expand Status Code Groups
         if response.status_code == 500:
             anomalies.append("500_INTERNAL_SERVER_ERROR")
         elif response.status_code == 413:
             anomalies.append("413_PAYLOAD_TOO_LARGE")
-
+        elif response.status_code == 429:
+            anomalies.append("429_RATE_LIMIT_LOCK") # New Group!
+            
         if duration > 1.5:
             anomalies.append("HIGH_LATENCY_DELAY")
-
-        indicators = [
-            "stack trace",
-            "exception",
-            "nullpointer",
-            "overflow",
-            "fatal",
-            "segmentation fault",
-        ]
-
-        for indicator in indicators:
-            if indicator in body:
-                anomalies.append(
-                    f"VERBOSE_LEAK_{indicator.upper()}"
-                )
+            
+        # 2. Dynamic Text Parsing - Split into precise anomaly groups!
+        if "typeerror" in body:
+            anomalies.append("CRITICAL_TYPE_CONFUSION") # New Group!
+        if "overflowexception" in body or "stack overflow" in body:
+            anomalies.append("MEMORY_BOUNDARY_OVERFLOW") # New Group!
+        if "sqlite3exception" in body or "sqlgrammarexception" in body:
+            anomalies.append("DATABASE_INJECTION_LEAK") # New Group!
+        if "filenotfoundexception" in body:
+            anomalies.append("PATH_TRAVERSAL_EXPOSURE") # New Group!
 
         for anomaly in anomalies:
-            self.log_anomaly(
-                anomaly,
-                response.status_code,
-                method,
-                url,
-                payload,
-                response.text,
-            )
+            self._log_anomaly(anomaly, response.status_code, method, url, send_payload, response.text[:250])
+     
+       
 
     def fuzz_worker(self, target):
         method = target["method"]
