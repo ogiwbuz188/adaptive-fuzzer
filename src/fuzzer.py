@@ -20,11 +20,14 @@ import time
 import traceback
 import html
 import math
+import statistics
+import hashlib
+import socket
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -139,7 +142,17 @@ class AdvancedBehavioralFuzzer:
 
         # Baselines collected at discovery time so anomalies are relative
         # to the target's normal behavior instead of exact bug signatures.
-        self.baselines = {}
+        self.baselines = {}  # key: (method, path) -> stats dict
+        self.baseline_samples = int(os.environ.get("FUZZ_BASELINE_SAMPLES", "8"))
+        self.z_threshold = float(os.environ.get("FUZZ_Z_THRESHOLD", "2.5"))
+
+        # Response signatures tracking to detect 'input ignored' behavior
+        self.response_signatures = {}  # key: (method,path) -> Counter(sig)
+        self.signatures_lock = threading.Lock()
+
+        # Seeds that provoked anomalies — used for feedback-directed fuzzing
+        self.interesting_seeds = []
+        self.interesting_lock = threading.Lock()
 
         self.user_agents = [
             (
@@ -156,6 +169,7 @@ class AdvancedBehavioralFuzzer:
             ),
         ]
 
+        # Expanded corpus that covers previously discovered seeds and new edge cases
         self.corpus = [
             "test_payload",
             '{"admin": true}',
@@ -163,12 +177,65 @@ class AdvancedBehavioralFuzzer:
             "<script>alert(1)</script>",
             "A" * 1000,
             "A" * 30000,
+            "\x00\x00\x00",
+            "\ud83d\ude00" * 200,
             "-1",
             "2147483647",
+            str(2 ** 63),
             "null",
             "[]",
             "{}",
+            "NaN",
+            "Infinity",
         ]
+
+    def _collect_baseline(self, method, path, blueprint, samples=None, timeout=3):
+        samples = samples or self.baseline_samples
+        lens = []
+        lats = []
+        statuses = []
+        ctypes = set()
+
+        url = urljoin(self.base_url + "/", path.lstrip("/"))
+        headers = {"User-Agent": random.choice(self.user_agents)}
+
+        for _ in range(samples):
+            try:
+                start = time.time()
+                if method in {"POST", "PUT"}:
+                    if blueprint.get("body_properties"):
+                        payload = self.build_payload(blueprint["body_properties"])
+                        r = requests.request(method, url, json=payload, timeout=timeout, headers=headers)
+                    else:
+                        payload = {"input": "warmup"}
+                        r = requests.request(method, url, json=payload, timeout=timeout, headers=headers)
+                else:
+                    params = {}
+                    if blueprint.get("query"):
+                        params[blueprint["query"][0]] = "warmup"
+                    r = requests.request(method, url, params=params, timeout=timeout, headers=headers)
+                dur = time.time() - start
+                lats.append(dur)
+                statuses.append(r.status_code)
+                cur_len = len(r.content or b"")
+                lens.append(cur_len)
+                ctypes.add(r.headers.get("Content-Type", "").split(";")[0].strip())
+                time.sleep(0.06)
+            except Exception:
+                # Record a high-latency/zero-length sample to bias detection
+                lats.append(timeout)
+                lens.append(0)
+                statuses.append(0)
+
+        baseline = {
+            "len_mean": statistics.mean(lens) if lens else 0,
+            "len_std": statistics.pstdev(lens) if len(lens) > 1 else 0,
+            "lat_mean": statistics.mean(lats) if lats else 0,
+            "lat_std": statistics.pstdev(lats) if len(lats) > 1 else 0,
+            "status_counter": Counter(statuses),
+            "content_types": ctypes,
+        }
+        return baseline
 
     def discover_via_spec(self, spec_url):
         print(f"[*] Extracting routes from schema: {spec_url}", flush=True)
@@ -219,49 +286,28 @@ class AdvancedBehavioralFuzzer:
             flush=True,
         )
 
-        # Warm up each endpoint to establish behavioral baselines. This is
-        # important so the fuzzer flags symptoms (unexpected status, huge
-        # change in response size, latency spikes) even when the bug itself
-        # is previously unknown.
+        # Build richer baselines using multiple warmup samples
         for ep in self.endpoints:
-            url = urljoin(self.base_url + "/", ep["path"].lstrip("/"))
-            method = ep["method"]
-            blueprint = ep["blueprint"]
-
             try:
-                headers = {"User-Agent": random.choice(self.user_agents)}
-                if method in {"POST", "PUT"}:
-                    if blueprint["body_properties"]:
-                        payload = self.build_payload(blueprint["body_properties"])
-                    else:
-                        payload = {"input": "warmup"}
-                    r = requests.request(method, url, json=payload, timeout=3, headers=headers)
-                else:
-                    params = {}
-                    if blueprint["query"]:
-                        params[blueprint["query"][0]] = "warmup"
-                    r = requests.request(method, url, params=params, timeout=3, headers=headers)
-
-                status_counter = Counter([r.status_code])
-                content_len = len(r.content or b"")
-                avg_len = content_len
-                content_types = {r.headers.get("Content-Type", "").split(";")[0].strip()}
-
-                self.baselines[(method, ep["path"])]= {
-                    "status_counter": status_counter,
-                    "avg_len": avg_len,
-                    "content_types": content_types,
-                }
-            except Exception:
-                # If warmup fails, store a minimal baseline so we can detect
-                # future connection drops / crashes as anomalies.
-                self.baselines[(method, ep["path"])]= {
+                baseline = self._collect_baseline(ep["method"], ep["path"], ep["blueprint"])
+                self.baselines[(ep["method"], ep["path"])] = baseline
+            except Exception as e:
+                print(f"[-] Baseline collection failed for {ep}: {e}")
+                self.baselines[(ep["method"], ep["path"])]= {
+                    "len_mean": 0,
+                    "len_std": 0,
+                    "lat_mean": 0,
+                    "lat_std": 0,
                     "status_counter": Counter(),
-                    "avg_len": 0,
                     "content_types": set(),
                 }
 
     def mutate(self, seed):
+        # Occasionally prefer interesting seeds discovered during earlier runs
+        with self.interesting_lock:
+            if self.interesting_seeds and random.random() < 0.18:
+                seed = random.choice(self.interesting_seeds)
+
         strategy = random.choice(
             [
                 "overflow",
@@ -269,15 +315,18 @@ class AdvancedBehavioralFuzzer:
                 "nested_json",
                 "traversal",
                 "format_string",
+                "int_edge",
+                "float_edge",
+                "partial_close",
             ]
         )
 
         if strategy == "overflow":
-            return str(seed) * 40
+            return str(seed) * random.randint(20, 80)
 
         if strategy == "type_scramble":
             return random.choice(
-                [None, True, False, -1, 999999999999, []]
+                [None, True, False, -1, 999999999999, [], {}]
             )
 
         if strategy == "nested_json":
@@ -288,10 +337,20 @@ class AdvancedBehavioralFuzzer:
             }
 
         if strategy == "traversal":
-            return "../" * 12 + "etc/passwd"
+            return "../" * random.randint(6, 18) + "etc/passwd"
 
         if strategy == "format_string":
-            return "%x%s" * 8
+            return "%x%s" * random.randint(4, 16)
+
+        if strategy == "int_edge":
+            return random.choice([-2147483649, -9223372036854775809, 2**63 - 1, 2**63])
+
+        if strategy == "float_edge":
+            return random.choice([float("nan"), float("inf"), -float("inf"), 1e309])
+
+        if strategy == "partial_close":
+            # Marker object the worker will interpret to send a partial request
+            return {"__partial_close__": True, "data": str(seed)}
 
         return seed
 
@@ -320,6 +379,12 @@ class AdvancedBehavioralFuzzer:
 
         return payload
 
+    def _zscore(self, value, mean, std):
+        if std == 0:
+            # if no variability, consider only large absolute deviations
+            return abs(value - mean) / (mean + 1)
+        return abs((value - mean) / std)
+
     def log_anomaly(
         self,
         classification,
@@ -345,6 +410,17 @@ class AdvancedBehavioralFuzzer:
         with self.findings_lock:
             self.findings.append(finding)
 
+        # If anomaly came from a payload, keep it as an interesting seed
+        try:
+            with self.interesting_lock:
+                if payload and payload not in self.interesting_seeds:
+                    self.interesting_seeds.append(payload)
+                    # keep the interesting list bounded
+                    if len(self.interesting_seeds) > 200:
+                        self.interesting_seeds = self.interesting_seeds[-200:]
+        except Exception:
+            pass
+
         print(
             f"[!] {classification}: {method} {url} "
             f"(status={status})",
@@ -352,23 +428,21 @@ class AdvancedBehavioralFuzzer:
         )
 
     def analyze(self, response, duration, method, url, send_payload):
-        """Analyze an HTTP response for symptomatic indicators of crashes or
-        unexpected behavior. This is intentionally generic — the fuzzer
-        looks for symptoms (high latency, 5xx, unusual response sizes,
-        traces, binary blobs, abrupt closes) rather than a database of
-        known bug signatures.
+        """Analyze HTTP response for symptomatic indicators using statistical
+        and heuristic checks. This intentionally searches for symptoms (not
+        specific bug names) so unknown bugs can be discovered.
         """
         anomalies = []
 
-        # Normalize body for textual checks but keep raw for evidence
+        # Normalize body
         try:
             body = (response.text or "").lower()
         except Exception:
             body = ""
 
-        status = response.status_code
+        status = response.status_code if hasattr(response, "status_code") else 0
 
-        # 1. Status-based symptoms
+        # Status-based
         if status >= 500:
             anomalies.append("500_INTERNAL_SERVER_ERROR")
         elif status == 413:
@@ -376,32 +450,43 @@ class AdvancedBehavioralFuzzer:
         elif status == 429:
             anomalies.append("429_RATE_LIMIT_LOCK")
 
-        # 2. Latency symptom
-        if duration > 1.5:
-            anomalies.append("HIGH_LATENCY_DELAY")
+        # Latency: compare vs baseline using z-score
+        parsed = urlparse(url)
+        path = parsed.path
+        baseline = self.baselines.get((method, path))
 
-        # 3. Response size anomalies relative to baseline
-        baseline = self.baselines.get((method, url.replace(self.base_url, "")))
+        cur_len = len(response.content or b"")
+
         if baseline:
-            avg = baseline.get("avg_len", 0)
-            cur_len = len(response.content or b"")
-            # If baseline exists and current length deviates drastically -> symptom
-            if avg > 0 and (cur_len > avg * 3 or cur_len < max(1, avg // 10)):
-                anomalies.append("RESPONSE_SIZE_ANOMALY")
+            size_z = self._zscore(cur_len, baseline.get("len_mean", 0), baseline.get("len_std", 0))
+            lat_z = self._zscore(duration, baseline.get("lat_mean", 0), baseline.get("lat_std", 0))
+
+            if size_z > self.z_threshold:
+                anomalies.append("RESPONSE_SIZE_OUTLIER")
+            if lat_z > self.z_threshold:
+                anomalies.append("LATENCY_OUTLIER")
 
             # Content-Type deviation
             ctype = response.headers.get("Content-Type", "").split(";")[0].strip()
-            if baseline.get("content_types") and ctype not in baseline.get("content_types"):
+            if baseline.get("content_types") and ctype and ctype not in baseline.get("content_types"):
                 anomalies.append("CONTENTTYPE_MISMATCH")
         else:
-            # No baseline — use heuristic sizes and binary content checks
-            cur_len = len(response.content or b"")
+            # Heuristics when no baseline available
             if cur_len == 0:
                 anomalies.append("EMPTY_RESPONSE_BODY")
             elif cur_len > 200000:
                 anomalies.append("UNEXPECTED_LARGE_RESPONSE")
 
-        # 4. Textual traces and crash markers (generic symptom matching)
+        # Content-Length header mismatch
+        hdr_len = response.headers.get("Content-Length")
+        if hdr_len is not None:
+            try:
+                if int(hdr_len) != cur_len:
+                    anomalies.append("CONTENT_LENGTH_MISMATCH")
+            except Exception:
+                anomalies.append("INVALID_CONTENT_LENGTH_HEADER")
+
+        # Textual crash markers
         crash_markers = [
             "segmentation fault",
             "stack overflow",
@@ -422,23 +507,69 @@ class AdvancedBehavioralFuzzer:
                 anomalies.append("STACK_OR_FATAL_TRACE")
                 break
 
-        # 5. Binary or truncated responses where text expected
-        ctype = response.headers.get("Content-Type", "").lower()
-        if "application/json" in ctype:
-            # Try to parse json — if it fails and body is non-empty, suspicious
+        # JSON well-formedness
+        ctype_l = response.headers.get("Content-Type", "").lower()
+        if "application/json" in ctype_l:
             try:
                 response.json()
             except Exception:
                 anomalies.append("MALFORMED_JSON_RESPONSE")
         else:
-            # If response advertises text but contains null bytes or non-text, mark it
-            if ("text" in ctype or "html" in ctype or ctype == "") and b"\x00" in (response.content or b""):
+            if ("text" in ctype_l or "html" in ctype_l or ctype_l == "") and b"\x00" in (response.content or b""):
                 anomalies.append("BINARY_IN_TEXT_RESPONSE")
 
-        # 6. If any anomaly discovered, attach evidence and surface it
+        # Response-signature tracking to detect 'input ignored' behaviour
+        sig = (response.status_code, hashlib.sha256(response.content or b"").hexdigest())
+        key = (method, path)
+        with self.signatures_lock:
+            ctr = self.response_signatures.setdefault(key, Counter())
+            ctr[sig] += 1
+            total = sum(ctr.values())
+            top_count = ctr.most_common(1)[0][1] if ctr else 0
+            if total >= 12 and (top_count / total) > 0.80:
+                anomalies.append("INPUT_IGNORED_OR_FILTERED")
+
+        # Surface anomalies
         for anomaly in set(anomalies):
             evidence = response.text[:1000] if hasattr(response, "text") else b""
             self.log_anomaly(anomaly, status, method, url, send_payload, evidence)
+
+    def _send_partial_http(self, url, method, headers, body_bytes, timeout=2):
+        """Send a partial HTTP request and close the socket to try to trigger
+        fragile parsers that crash on truncated input.
+        Returns a synthetic response-like object for analysis.
+        """
+        parsed = urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        path = parsed.path or "/"
+
+        req_lines = [f"{method} {path} HTTP/1.1", f"Host: {host}"]
+        for k, v in (headers or {}).items():
+            req_lines.append(f"{k}: {v}")
+        req_lines.append(f"Content-Length: {len(body_bytes)}")
+        req_lines.append("")
+        req_head = "\r\n".join(req_lines).encode("utf-8")
+
+        try:
+            conn = socket.create_connection((host, port), timeout=timeout)
+            conn.sendall(req_head + body_bytes[: max(1, len(body_bytes) // 4)])
+            # Intentionally close early
+            conn.close()
+            # Build a synthetic response indicating we closed early
+            class _R:
+                status_code = 0
+                headers = {}
+                content = b""
+                text = ""
+            return _R()
+        except Exception:
+            class _R:
+                status_code = 0
+                headers = {}
+                content = b""
+                text = ""
+            return _R()
 
     def fuzz_worker(self, target):
         method = target["method"]
@@ -447,7 +578,7 @@ class AdvancedBehavioralFuzzer:
         url = urljoin(self.base_url + "/", path.lstrip("/"))
 
         try:
-            time.sleep(random.uniform(0.05, 0.25))
+            time.sleep(random.uniform(0.02, 0.12))
 
             headers = {
                 "User-Agent": random.choice(self.user_agents),
@@ -455,10 +586,11 @@ class AdvancedBehavioralFuzzer:
             }
 
             request_kwargs = {
-                "timeout": 4,
+                "timeout": 6,
                 "headers": headers,
             }
 
+            partial_probe = False
             if method in {"POST", "PUT"}:
                 if blueprint["body_properties"]:
                     payload = self.build_payload(
@@ -471,7 +603,12 @@ class AdvancedBehavioralFuzzer:
                         )
                     }
 
-                request_kwargs["json"] = payload
+                # Detect if mutate returned a partial-close marker
+                if isinstance(payload, dict) and payload.get("__partial_close__"):
+                    partial_probe = True
+                    body_bytes = json.dumps({k: v for k, v in payload.items() if k != "__partial_close__"}).encode("utf-8")
+                else:
+                    request_kwargs["json"] = payload
             else:
                 if blueprint["query"]:
                     parameter = random.choice(blueprint["query"])
@@ -486,12 +623,18 @@ class AdvancedBehavioralFuzzer:
                 request_kwargs["params"] = payload
 
             start = time.time()
-            response = requests.request(
-                method,
-                url,
-                **request_kwargs,
-            )
-            duration = time.time() - start
+
+            if partial_probe:
+                # send a truncated request using raw socket
+                response = self._send_partial_http(url, method, headers, body_bytes)
+                duration = time.time() - start
+            else:
+                response = requests.request(
+                    method,
+                    url,
+                    **request_kwargs,
+                )
+                duration = time.time() - start
 
             # Analyze response for symptomatic indications of failure
             self.analyze(
@@ -541,11 +684,15 @@ class AdvancedBehavioralFuzzer:
                 "Call discover_via_spec() first."
             )
 
+        # allow dynamic scaling: if there are interesting seeds, intensify
+        if self.interesting_seeds:
+            total_runs = int(total_runs * (1 + min(3, len(self.interesting_seeds) / 50)))
+
         self.total_requests = total_runs
 
         print(
             f"[*] Dispatching execution matrix across "
-            f"{self.max_workers} threads...",
+            f"{self.max_workers} threads... (runs={total_runs})",
             flush=True,
         )
 
