@@ -4,10 +4,6 @@ A lightweight, autonomous API fuzzing engine designed to stress-test REST servic
 
 This repository combines dynamic route discovery, adaptive payload generation, multi-threaded execution, automated HTML reporting, CSV telemetry capture, and GitHub Actions integration to help uncover boundary-condition failures across many benchmark servers.
 
-## Status
-
-- CI: recent IndentationError in `src/fuzzer.py` (function body not indented) has been fixed. The fix ensured all function bodies are properly indented and CI runs now proceed to generate telemetry and plots.
-
 ## Why this project exists
 
 Modern APIs often fail under unexpected, malformed, oversized, nested, or hostile payloads. Traditional validation may miss edge cases that only appear under realistic traffic patterns or concurrent execution.
@@ -62,10 +58,13 @@ adaptive-fuzzer/
 │   └── fuzzer.py                # core fuzzing engine
 ├── research_benchmark/
 │   ├── input_validation_failure/
-│   │   └── missing_type_casts.py
-│   ├── memory_safety/
-│   │   └── ...
-│   └── ...
+│   │   └── missing_type_casts.py  # and more
+│   ├── boundary_condition_crises/
+│   │   └── integer_overflow_routes.py # and more
+│   ├── broken_object_level_Auth/ 
+|   │   └── BOLA_id_enumeration.py # and more 
+|   ├── injection_path_traversal/
+|       └── relative_directory_traversal.py # and more
 ├── requirements.txt
 ├── run_test.py                  # orchestration entry point
 ├── README.md
@@ -76,7 +75,7 @@ adaptive-fuzzer/
 
 Architecture blueprint (benchmarks)
 
-- The `research_benchmark/` directory is organized into category subdirectories (for example `input_validation_failure/`, `memory_safety/`).
+- The `research_benchmark/` directory is organized into category subdirectories (for example `input_validation_failure/`,` boundary_condition_crises/` and 2 more).
 - Each category contains a consistent, complete suite of benchmark server scripts so that every category can be exercised uniformly by the orchestration runner. These per-category suites are structured identically to enable batched, automated discovery and reporting.
 - `run_test.py` performs a recursive discovery of every `.py` file in `research_benchmark/`, starts each server instance in isolation, and runs the fuzz matrix against each discovered target.
 
