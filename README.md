@@ -327,3 +327,15 @@ python notebooks/generate_plots.py
 ```
 
 Then open the generated `*_dashboard.html` file or inspect the generated PNG charts in `notebooks/` to review the results.
+
+
+## Research Methodology & Acknowledgments
+
+This repository serves as the core practical component of an independent high school cybersecurity research initiative.
+
+As an eleventh-grade student building a foundation in systems programming, the code structure, regex parsing mechanisms, and CI/CD workflows within this project were constructed using an iterative development methodology powered by Large Language Models (LLMs) and generative AI coding assistants. 
+
+While the fundamental programming logic and architectural layout were generated with AI assistance, the core research pivot—transitioning from a standard signature-based baseline to an anomaly-driven, state-deviation scanning mechanism—was driven by independent research paper analysis and manual debugging iterations within VS Code using online cheat sheets. 
+
+The finalized benchmark suites and anomaly telemetry logs generated here are structured to prepare this work for formal academic mentorship and peer review within the computer systems and automation security domain.
+
