@@ -59,10 +59,8 @@ adaptive-fuzzer/
 │   └── injection_path_traversal/      # 25 test files targeting directory traversal routes
 ├── notebooks/
 │   ├── generate_plots.py              # Script for telemetry analysis and chart generation
-│   └── outputs/                       # Generated PNG chart assets
 ├── data/
-│   ├── test_runs.csv                  # Generated raw telemetry log data
-│   └── dashboards/                    # Generated interactive HTML dashboards
+│   ├── .gitkeep
 ├── requirements.txt                   # Dependency list
 ├── run_test.py                        # Central orchestration and runtime entry point
 ├── LICENSE.md                         # Open-source licensing terms
