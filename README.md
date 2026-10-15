@@ -1,12 +1,16 @@
 # Adaptive Behavioral Fuzzer
 
-A lightweight, autonomous API fuzzing engine designed to stress-test REST services, identify boundary-condition failures, and generate human-readable telemetry dashboards and analytics from the resulting findings.
+A lightweight, autonomous API fuzzing engine designed to stress-test REST services, identify boundary-condition failures, and generate human-readable telemetry dashboards and analytics from the results.
 
-This repository combines dynamic route discovery, adaptive payload generation, multi-threaded execution, automated HTML reporting, CSV telemetry capture, and GitHub Actions integration to help uncover edge-case vulnerabilities in benchmark services.
+This repository combines dynamic route discovery, adaptive payload generation, multi-threaded execution, automated HTML reporting, CSV telemetry capture, and GitHub Actions integration to help uncover boundary-condition failures across many benchmark servers.
+
+## Status
+
+- CI: recent IndentationError in `src/fuzzer.py` (function body not indented) has been fixed. The fix ensured all function bodies are properly indented and CI runs now proceed to generate telemetry and plots.
 
 ## Why this project exists
 
-Modern APIs often fail under unexpected, malformed, oversized, nested, or hostile payloads. Traditional validation may miss edge cases that only appear under realistic traffic patterns or concurrent use.
+Modern APIs often fail under unexpected, malformed, oversized, nested, or hostile payloads. Traditional validation may miss edge cases that only appear under realistic traffic patterns or concurrent execution.
 
 This project helps by:
 
@@ -69,6 +73,12 @@ adaptive-fuzzer/
 ├── LICENSE.md
 └── notebooks/                   # generated PNG chart outputs
 ```
+
+Architecture blueprint (benchmarks)
+
+- The `research_benchmark/` directory is organized into category subdirectories (for example `input_validation_failure/`, `memory_safety/`).
+- Each category contains a consistent, complete suite of benchmark server scripts so that every category can be exercised uniformly by the orchestration runner. These per-category suites are structured identically to enable batched, automated discovery and reporting.
+- `run_test.py` performs a recursive discovery of every `.py` file in `research_benchmark/`, starts each server instance in isolation, and runs the fuzz matrix against each discovered target.
 
 ## Prerequisites
 
@@ -293,7 +303,7 @@ This handles analytical chart generation from the telemetry dataset.
 
 ### `research_benchmark/`
 
-This directory contains benchmark API servers used for local validation and telemetry generation.
+This directory contains benchmark API servers used for local validation and telemetry generation. Each category is structured to contain a complete, uniform suite of benchmark scripts to allow consistent, automated discovery and execution.
 
 ## Example anomaly classes detected
 
@@ -308,7 +318,7 @@ The fuzzer can surface issues such as:
 
 ## Notes
 
-This project is intended for controlled testing in local environments, lab environments, or systems you own or are explicitly authorized to test. Use it responsibly and only against environments you are permitted to assess.
+This project is intended for controlled testing in local environments, lab environments, or systems you own or are explicitly authorized to test. Use it responsibly and only against environments you are permitted to test.
 
 ---
 
