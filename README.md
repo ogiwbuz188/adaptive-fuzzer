@@ -49,28 +49,25 @@ The project includes:
 adaptive-fuzzer/
 ├── .github/
 │   └── workflows/
-│       └── fuzz.yml
-├── data/
-│   └── test_runs.csv            # generated telemetry export
-├── notebooks/
-│   └── generate_plots.py        # analytics and chart generation
+│       └── fuzz.yml                   # CI/CD integration for automated pipeline testing
 ├── src/
-│   └── fuzzer.py                # core fuzzing engine
+│   └── fuzzer.py                      # Core signatureless anomaly-detection engine
 ├── research_benchmark/
-│   ├── input_validation_failure/
-│   │   └── missing_type_casts.py  # and more
-│   ├── boundary_condition_crises/
-│   │   └── integer_overflow_routes.py # and more
-│   ├── broken_object_level_Auth/ 
-|   │   └── BOLA_id_enumeration.py # and more 
-|   ├── injection_path_traversal/
-|       └── relative_directory_traversal.py # and more
-├── requirements.txt
-├── run_test.py                  # orchestration entry point
-├── README.md
-├── *_dashboard.html             # generated HTML dashboards
-├── LICENSE.md
-└── notebooks/                   # generated PNG chart outputs
+│   ├── input_validation_failure/      # 25 test files tracking type cast faults
+│   ├── boundary_condition_crises/     # 25 test files mapping integer/buffer edge cases
+│   ├── broken_object_level_auth/      # 25 test files highlighting BOLA enumeration
+│   └── injection_path_traversal/      # 25 test files targeting directory traversal routes
+├── notebooks/
+│   ├── generate_plots.py              # Script for telemetry analysis and chart generation
+│   └── outputs/                       # Generated PNG chart assets
+├── data/
+│   ├── test_runs.csv                  # Generated raw telemetry log data
+│   └── dashboards/                    # Generated interactive HTML dashboards
+├── requirements.txt                   # Dependency list
+├── run_test.py                        # Central orchestration and runtime entry point
+├── LICENSE.md                         # Open-source licensing terms
+└── README.md                          # Project documentation and architectural overview
+
 ```
 
 Architecture blueprint (benchmarks)
