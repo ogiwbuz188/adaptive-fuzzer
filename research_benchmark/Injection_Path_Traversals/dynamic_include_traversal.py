@@ -1,16 +1,11 @@
-# ==============================================================================
-# Copyright (c) 2026 Your Name
-# Licensed under the MIT License.
-# Research Benchmark: 04_Injection_Path_Traversals - Scenario B
-# ==============================================================================
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 
-class LogInjectionService(BaseHTTPRequestHandler):
+class DynamicIncludeService(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/swagger.json":
-            schema = {"paths": {"/api/v1/log-resource": {"post": {"requestBody": {"content": {"application/json": {"schema": {"properties": {"log_identifier": {"type": "string"}}}}}}}}}}
+            schema = {"paths": {"/api/v1/dynamic-include": {"post": {"requestBody": {"content": {"application/json": {"schema": {"properties": {"resource_path": {"type": "string"}}}}}}}}}}
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -20,7 +15,7 @@ class LogInjectionService(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        if "/api/v1/log-resource" in self.path:
+        if "/api/v1/dynamic-include" in self.path:
             content_length = int(self.headers.get('Content-Length', 0))
             body_bytes = self.rfile.read(content_length)
             try:
@@ -30,22 +25,22 @@ class LogInjectionService(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            identifier = parsed_json.get("log_identifier")
+            path_val = parsed_json.get("resource_path")
             
-            # 🚨 CRASH POINT: Relative log routing path manipulation
-            if isinstance(identifier, str) and "../" in identifier:
+            # 🚨 CRASH POINT: Unchecked file loading path traversal
+            if isinstance(path_val, str) and "../" in path_val:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
                 self.end_headers()
-                self.wfile.write(b"VERBOSE_LEAK_EXCEPTION: java.io.IOException: Log buffer stream initialization failed tracing raw mapping parameters context footprint: root:x:0:0")
+                self.wfile.write(b"CRITICAL_SYSTEM_LEAK: java.io.FileNotFoundException: Target core environment assets breached: root:x:0:0:root:/root:/bin/bash")
                 return
 
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b'{"status": "logger_flushed"}')
+            self.wfile.write(b'{"status": "include_processed"}')
             return
 
 if __name__ == "__main__":
-    server = HTTPServer(("localhost", 9000), LogInjectionService)
-    print("[*] Log Injection Service running on http://localhost:9000")
+    server = HTTPServer(("localhost", 9000), DynamicIncludeService)
+    print("[*] Dynamic Include Service running on http://localhost:9000")
     server.serve_forever()
