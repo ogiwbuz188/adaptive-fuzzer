@@ -1,8 +1,3 @@
-# ==============================================================================
-# Copyright (c) 2026 Your Name
-# Licensed under the MIT License.
-# Research Benchmark: 04_Injection_Path_Traversals - Scenario B
-# ==============================================================================
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
