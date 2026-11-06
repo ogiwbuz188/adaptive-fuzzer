@@ -27,7 +27,6 @@ class AbsolutePathService(BaseHTTPRequestHandler):
 
             profile_config_path = parsed_json.get("profile_config_path")
             
-            # 🚨 CRASH POINT: Traversal / Environment signature disclosure mapping
             if isinstance(profile_config_path, str) and "../" in profile_config_path:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
