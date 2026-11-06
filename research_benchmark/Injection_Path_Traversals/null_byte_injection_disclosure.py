@@ -19,7 +19,6 @@ class NullByteInjectionService(BaseHTTPRequestHandler):
 
             asset_name = parsed_json.get("secured_asset_file_name")
             
-            # 🚨 CRASH POINT: Null byte parameter file termination poisoning injection string check
             if isinstance(asset_name, str) and "../" in asset_name:
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"VERBOSE_LEAK_EXCEPTION: java.io.IOException: Null byte string terminal sequence validation collapsed. System file reference root state trace tracking log compiled: root:x:0:0")
