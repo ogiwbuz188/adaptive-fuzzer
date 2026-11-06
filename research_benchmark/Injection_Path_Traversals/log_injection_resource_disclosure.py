@@ -27,7 +27,6 @@ class LogInjectionService(BaseHTTPRequestHandler):
 
             identifier = parsed_json.get("log_identifier")
             
-            # 🚨 CRASH POINT: Relative log routing path manipulation
             if isinstance(identifier, str) and "../" in identifier:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
