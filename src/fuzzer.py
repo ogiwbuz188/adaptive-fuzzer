@@ -42,7 +42,6 @@ class MockServerHandler(BaseHTTPRequestHandler):
     """Local HTTP target used by the fuzzer."""
 
     def log_message(self, format_string, *args):
-        # Keep GitHub Actions output focused on the fuzzer.
         return
 
     def send_json(self, status_code, payload):
@@ -140,17 +139,13 @@ class AdvancedBehavioralFuzzer:
         self.total_requests = 0
         self.findings_lock = threading.Lock()
 
-        # Baselines collected at discovery time so anomalies are relative
-        # to the target's normal behavior instead of exact bug signatures.
-        self.baselines = {}  # key: (method, path) -> stats dict
+        self.baselines = {}  
         self.baseline_samples = int(os.environ.get("FUZZ_BASELINE_SAMPLES", "8"))
         self.z_threshold = float(os.environ.get("FUZZ_Z_THRESHOLD", "2.5"))
 
-        # Response signatures tracking to detect 'input ignored' behavior
-        self.response_signatures = {}  # key: (method,path) -> Counter(sig)
+        self.response_signatures = {}  
         self.signatures_lock = threading.Lock()
 
-        # Seeds that provoked anomalies — used for feedback-directed fuzzing
         self.interesting_seeds = []
         self.interesting_lock = threading.Lock()
 
@@ -169,7 +164,6 @@ class AdvancedBehavioralFuzzer:
             ),
         ]
 
-        # Expanded corpus that covers previously discovered seeds and new edge cases
         self.corpus = [
             "test_payload",
             '{"admin": true}',
@@ -222,7 +216,6 @@ class AdvancedBehavioralFuzzer:
                 ctypes.add(r.headers.get("Content-Type", "").split(";")[0].strip())
                 time.sleep(0.06)
             except Exception:
-                # Record a high-latency/zero-length sample to bias detection
                 lats.append(timeout)
                 lens.append(0)
                 statuses.append(0)
@@ -286,7 +279,6 @@ class AdvancedBehavioralFuzzer:
             flush=True,
         )
 
-        # Build richer baselines using multiple warmup samples
         for ep in self.endpoints:
             try:
                 baseline = self._collect_baseline(ep["method"], ep["path"], ep["blueprint"])
@@ -303,7 +295,6 @@ class AdvancedBehavioralFuzzer:
                 }
 
     def mutate(self, seed):
-        # Occasionally prefer interesting seeds discovered during earlier runs
         with self.interesting_lock:
             if self.interesting_seeds and random.random() < 0.18:
                 seed = random.choice(self.interesting_seeds)
@@ -349,7 +340,6 @@ class AdvancedBehavioralFuzzer:
             return random.choice([float("nan"), float("inf"), -float("inf"), 1e309])
 
         if strategy == "partial_close":
-            # Marker object the worker will interpret to send a partial request
             return {"__partial_close__": True, "data": str(seed)}
 
         return seed
@@ -381,7 +371,6 @@ class AdvancedBehavioralFuzzer:
 
     def _zscore(self, value, mean, std):
         if std == 0:
-            # if no variability, consider only large absolute deviations
             return abs(value - mean) / (mean + 1)
         return abs((value - mean) / std)
 
@@ -410,12 +399,10 @@ class AdvancedBehavioralFuzzer:
         with self.findings_lock:
             self.findings.append(finding)
 
-        # If anomaly came from a payload, keep it as an interesting seed
         try:
             with self.interesting_lock:
                 if payload and payload not in self.interesting_seeds:
                     self.interesting_seeds.append(payload)
-                    # keep the interesting list bounded
                     if len(self.interesting_seeds) > 200:
                         self.interesting_seeds = self.interesting_seeds[-200:]
         except Exception:
@@ -434,7 +421,6 @@ class AdvancedBehavioralFuzzer:
         """
         anomalies = []
 
-        # Normalize body
         try:
             body = (response.text or "").lower()
         except Exception:
@@ -442,7 +428,6 @@ class AdvancedBehavioralFuzzer:
 
         status = response.status_code if hasattr(response, "status_code") else 0
 
-        # Status-based
         if status >= 500:
             anomalies.append("500_INTERNAL_SERVER_ERROR")
         elif status == 413:
@@ -450,7 +435,6 @@ class AdvancedBehavioralFuzzer:
         elif status == 429:
             anomalies.append("429_RATE_LIMIT_LOCK")
 
-        # Latency: compare vs baseline using z-score
         parsed = urlparse(url)
         path = parsed.path
         baseline = self.baselines.get((method, path))
@@ -466,18 +450,15 @@ class AdvancedBehavioralFuzzer:
             if lat_z > self.z_threshold:
                 anomalies.append("LATENCY_OUTLIER")
 
-            # Content-Type deviation
             ctype = response.headers.get("Content-Type", "").split(";")[0].strip()
             if baseline.get("content_types") and ctype and ctype not in baseline.get("content_types"):
                 anomalies.append("CONTENTTYPE_MISMATCH")
         else:
-            # Heuristics when no baseline available
             if cur_len == 0:
                 anomalies.append("EMPTY_RESPONSE_BODY")
             elif cur_len > 200000:
                 anomalies.append("UNEXPECTED_LARGE_RESPONSE")
 
-        # Content-Length header mismatch
         hdr_len = response.headers.get("Content-Length")
         if hdr_len is not None:
             try:
@@ -486,7 +467,6 @@ class AdvancedBehavioralFuzzer:
             except Exception:
                 anomalies.append("INVALID_CONTENT_LENGTH_HEADER")
 
-        # Textual crash markers
         crash_markers = [
             "segmentation fault",
             "stack overflow",
@@ -507,7 +487,6 @@ class AdvancedBehavioralFuzzer:
                 anomalies.append("STACK_OR_FATAL_TRACE")
                 break
 
-        # JSON well-formedness
         ctype_l = response.headers.get("Content-Type", "").lower()
         if "application/json" in ctype_l:
             try:
@@ -518,7 +497,6 @@ class AdvancedBehavioralFuzzer:
             if ("text" in ctype_l or "html" in ctype_l or ctype_l == "") and b"\x00" in (response.content or b""):
                 anomalies.append("BINARY_IN_TEXT_RESPONSE")
 
-        # Response-signature tracking to detect 'input ignored' behaviour
         sig = (response.status_code, hashlib.sha256(response.content or b"").hexdigest())
         key = (method, path)
         with self.signatures_lock:
@@ -529,7 +507,6 @@ class AdvancedBehavioralFuzzer:
             if total >= 12 and (top_count / total) > 0.80:
                 anomalies.append("INPUT_IGNORED_OR_FILTERED")
 
-        # Surface anomalies
         for anomaly in set(anomalies):
             evidence = response.text[:1000] if hasattr(response, "text") else b""
             self.log_anomaly(anomaly, status, method, url, send_payload, evidence)
@@ -554,9 +531,7 @@ class AdvancedBehavioralFuzzer:
         try:
             conn = socket.create_connection((host, port), timeout=timeout)
             conn.sendall(req_head + body_bytes[: max(1, len(body_bytes) // 4)])
-            # Intentionally close early
             conn.close()
-            # Build a synthetic response indicating we closed early
             class _R:
                 status_code = 0
                 headers = {}
@@ -603,7 +578,6 @@ class AdvancedBehavioralFuzzer:
                         )
                     }
 
-                # Detect if mutate returned a partial-close marker
                 if isinstance(payload, dict) and payload.get("__partial_close__"):
                     partial_probe = True
                     body_bytes = json.dumps({k: v for k, v in payload.items() if k != "__partial_close__"}).encode("utf-8")
@@ -625,7 +599,6 @@ class AdvancedBehavioralFuzzer:
             start = time.time()
 
             if partial_probe:
-                # send a truncated request using raw socket
                 response = self._send_partial_http(url, method, headers, body_bytes)
                 duration = time.time() - start
             else:
@@ -636,7 +609,6 @@ class AdvancedBehavioralFuzzer:
                 )
                 duration = time.time() - start
 
-            # Analyze response for symptomatic indications of failure
             self.analyze(
                 response,
                 duration,
@@ -656,7 +628,6 @@ class AdvancedBehavioralFuzzer:
             )
 
         except requests.exceptions.ConnectionError as error:
-            # Connection errors are strong signals of crashes / process exits
             self.log_anomaly(
                 "CONNECTION_REFUSED_OR_RESET",
                 0,
@@ -684,7 +655,6 @@ class AdvancedBehavioralFuzzer:
                 "Call discover_via_spec() first."
             )
 
-        # allow dynamic scaling: if there are interesting seeds, intensify
         if self.interesting_seeds:
             total_runs = int(total_runs * (1 + min(3, len(self.interesting_seeds) / 50)))
 
@@ -711,7 +681,6 @@ class AdvancedBehavioralFuzzer:
 
             for future in as_completed(futures):
                 try:
-                    # Ensures unexpected worker exceptions are visible.
                     future.result()
                 except Exception as error:
                     failures.append(error)
