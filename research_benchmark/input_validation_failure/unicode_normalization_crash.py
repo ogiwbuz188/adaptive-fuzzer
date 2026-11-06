@@ -1,3 +1,4 @@
+
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 
@@ -16,7 +17,6 @@ class UnicodeCrashService(BaseHTTPRequestHandler):
             except Exception: self.send_response(400); self.end_headers(); return
 
             text = parsed_json.get("unicode_input_text")
-            # 🚨 CRASH POINT: Handling specific null structures inside complex string metrics
             if isinstance(text, str) and ("\x00" in text or len(text.encode('utf-8')) > 3000):
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"CRITICAL_SYSTEM_LEAK: Uncaught UnicodeDecodeError: Wide-character mapping registry trace failure inside codec parsing engine window.")
