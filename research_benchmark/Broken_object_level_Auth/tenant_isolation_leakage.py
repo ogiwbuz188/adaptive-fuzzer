@@ -27,7 +27,6 @@ class TenantIsolationService(BaseHTTPRequestHandler):
 
             tenant_id = parsed_json.get("tenant_id")
             
-            # 🚨 CRASH POINT: SQL Context Injection BOLA leak
             if isinstance(tenant_id, str) and any(x in tenant_id.upper() for x in ["UNION", "SELECT", "' OR"]):
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
