@@ -27,7 +27,6 @@ class ExponentialBufferService(BaseHTTPRequestHandler):
 
             payload = parsed_json.get("stream_payload")
             
-            # 🚨 CRASH POINT: Explodes text buffers exponentially under mutation overflow attacks
             if isinstance(payload, str) and len(payload) > 10000:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
