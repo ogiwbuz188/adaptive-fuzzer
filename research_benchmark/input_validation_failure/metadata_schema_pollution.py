@@ -28,12 +28,9 @@ class MetadataSchemaPollutionService(BaseHTTPRequestHandler):
             meta = parsed_json.get("meta_attributes")
             
             try:
-                # Simulated complex object merging routine vulnerable to type pollution
                 if not isinstance(meta, dict):
-                    # Blindly processing properties without validating inner structures
                     raise AttributeError("Invalid mapping descriptor format initialized.")
                 
-                # 🚨 CRASH POINT: If fuzzer mutates keys into lists or types that lack a .items() method
                 runtime_cache = {}
                 for key, value in meta.items():
                     if isinstance(value, dict):
