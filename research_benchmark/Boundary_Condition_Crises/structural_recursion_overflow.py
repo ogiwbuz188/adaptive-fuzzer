@@ -35,7 +35,6 @@ class StructuralRecursionService(BaseHTTPRequestHandler):
             tree = parsed_json.get("nested_tree")
             
             try:
-                # 🚨 CRASH POINT: Deeply nested JSON strategy breaks internal processing loop
                 self._parse_depth(tree)
                 self.send_response(200)
                 self.end_headers()
