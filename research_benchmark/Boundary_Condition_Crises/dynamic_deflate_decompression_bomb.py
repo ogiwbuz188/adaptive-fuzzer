@@ -19,8 +19,6 @@ class DecompressionBombService(BaseHTTPRequestHandler):
 
             data_map = parsed_json.get("compressed_data_map")
             
-            # 🚨 CRASH POINT: Decompression structural memory exhaustion explosion
-            # If the fuzzer delivers multi-nested JSON structures mimicking infinite inflation ratios
             if isinstance(data_map, dict) and len(str(data_map)) > 400:
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"CRITICAL_HEAP_EXHAUSTION: ZipException: Inflation dictionary buffer size exceeded system limits. Uncaught out-of-memory array allocation fault inside low-level zip file decompressor stack.")
