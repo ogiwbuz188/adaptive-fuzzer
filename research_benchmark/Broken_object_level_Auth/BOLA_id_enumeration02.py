@@ -27,8 +27,6 @@ class BOLAEnumerationService(BaseHTTPRequestHandler):
 
             invoice_id = parsed_json.get("invoice_id")
             
-            # 🚨 CRASH POINT: BOLA Parameter Scrambling
-            # If the fuzzer injects raw logical array mutations or negative index flags
             if isinstance(invoice_id, (int, float)) and invoice_id < 0:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
