@@ -19,7 +19,6 @@ class Base64CorruptorService(BaseHTTPRequestHandler):
             b64_data = parsed_json.get("b64_encoded_data")
             try:
                 if b64_data is not None:
-                    # 🚨 CRASH POINT: Mutated non-b64 strings trigger uncaught binary format faults
                     base64.b64decode(str(b64_data).encode('utf-8'), validate=True)
                 self.send_response(200); self.end_headers(); self.wfile.write(b'{"status":"valid"}')
             except Exception as e:
