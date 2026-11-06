@@ -1,8 +1,3 @@
-# ==============================================================================
-# Copyright (c) 2026 Your Name
-# Licensed under the MIT License.
-# Research Benchmark: 03_Broken_Object_Level_Auth - Scenario B
-# ==============================================================================
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -32,7 +27,6 @@ class CryptoSignatureService(BaseHTTPRequestHandler):
 
             sign = parsed_json.get("crypto_sign")
             
-            # 🚨 CRASH POINT: Type confusion on signature blocks
             if sign is not None and not isinstance(sign, str):
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
