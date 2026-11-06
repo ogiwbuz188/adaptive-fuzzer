@@ -31,7 +31,6 @@ def extract_target_path(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-        # Find all occurrences and return the first sensible one
         matches = re.findall(r'"(/api/v[0-9]+/[^"\s]+)"', content)
         if matches:
             return matches[0]
@@ -118,7 +117,6 @@ def _monitor_target(server_proc, fuzzer, file_prefix, poll_interval=0.5):
     ]
 
     while True:
-        # Check if process ended unexpectedly
         code = server_proc.poll()
         if code is not None and code != 0:
             evidence = tail_last(stderr_path, 4096) or tail_last(stdout_path, 4096)
@@ -131,7 +129,6 @@ def _monitor_target(server_proc, fuzzer, file_prefix, poll_interval=0.5):
                 evidence,
             )
             break
-        # Scan logs for crash markers
         logs = tail_last(stderr_path, 4096) + "\n" + tail_last(stdout_path, 4096)
         if any(marker in logs.lower() for marker in crash_markers):
             fuzzer.log_anomaly(
@@ -142,7 +139,6 @@ def _monitor_target(server_proc, fuzzer, file_prefix, poll_interval=0.5):
                 "LOG_TRACE",
                 logs[-2000:],
             )
-            # don't break immediately — we keep monitoring until process exits
         time.sleep(poll_interval)
 
 
@@ -151,7 +147,6 @@ def main():
 
     fuzzer = AdvancedBehavioralFuzzer(base_url="http://localhost:9000", max_workers=8)
 
-    # Recursively search for all Python files in research_benchmark and its subdirectories
     search_pattern = os.path.join("research_benchmark", "**", "*.py")
     test_servers = glob.glob(search_pattern, recursive=True)
 
@@ -168,8 +163,6 @@ def main():
 
         fuzzer.findings = []
 
-        # If server exposes swagger, prefer that for discovery. We'll still
-        # fallback to static extraction where needed.
         dynamic_path = extract_target_path(server_file)
         print(f"[+] Fallback mapped target route: {dynamic_path}")
 
@@ -184,26 +177,20 @@ def main():
         with open(stdout_path, "wb") as out_f, open(stderr_path, "wb") as err_f:
             server_proc = subprocess.Popen([sys.executable, server_file], stdout=out_f, stderr=err_f)
 
-        # Give the server a moment to start
         time.sleep(1.0)
 
-        # After boot, try to let the fuzzer probe /swagger.json to discover
-        # a richer set of endpoints when available.
         try:
             resp = requests.get("http://localhost:9000/swagger.json", timeout=1)
             if resp.status_code == 200:
                 try:
                     fuzzer.discover_via_spec("http://localhost:9000/swagger.json")
                     print(f"[+] Discovered {len(fuzzer.endpoints)} endpoints via swagger.json")
-                    # override runs based on new endpoints density
                     runs = max(runs, 30 * len(fuzzer.endpoints))
                 except Exception as e:
                     print(f"[-] Swagger discovery failed: {e}")
         except Exception:
-            # swagger not present; continue with fallback
             pass
 
-        # Start monitor thread to capture crashes printed to server logs and unexpected exits
         monitor_thread = threading.Thread(target=_monitor_target, args=(server_proc, fuzzer, file_prefix), daemon=True)
         monitor_thread.start()
 
@@ -214,17 +201,14 @@ def main():
             print(f"[-] Error occurred while fuzzing {server_file}: {str(run_error)}")
         finally:
             print(f"[*] Shutting down target script process safely -> {server_file}")
-            # Ask the process to terminate and wait a short time
             try:
                 server_proc.terminate()
                 server_proc.wait(timeout=3)
             except Exception:
                 server_proc.kill()
 
-        # Ensure monitor thread sees final logs
         time.sleep(0.5)
 
-        # Merge any latest logs into evidence files saved with the report
         fuzzer.generate_web_dashboard(report_name=f"{file_prefix}_dashboard.html")
         time.sleep(1)
 
