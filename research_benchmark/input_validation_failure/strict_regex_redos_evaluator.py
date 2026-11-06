@@ -20,11 +20,9 @@ class RegexRedosService(BaseHTTPRequestHandler):
 
             query = parsed_json.get("search_query_string")
             
-            # 🚨 CRASH POINT: Regular Expression Backtracking CPU exhaustion lock
-            # If the fuzzer transmits an overlapping string value matching an unsafe loop regex pattern
             if isinstance(query, str) and (len(query) > 500 or "%x%s" in query):
                 import time
-                time.sleep(2.2) # Simulate CPU structural thread lock exhaustion anomaly
+                time.sleep(2.2) 
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"HIGH_LATENCY_DELAY: RegexEngineException: Infinite catastrophic backtracking detected inside regular expression evaluation registry matrix limits.")
                 return
