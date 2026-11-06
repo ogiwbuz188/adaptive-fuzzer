@@ -19,7 +19,6 @@ class HashShadowingBolasService(BaseHTTPRequestHandler):
 
             routing_hash = parsed_json.get("account_routing_hash")
             
-            # 🚨 CRASH POINT: BOLA parameter pollution hash shadowing database exploitation
             if isinstance(routing_hash, str) and any(sqli in routing_hash.upper() for sqli in ["UNION", "SELECT", "' OR"]):
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"VERBOSE_LEAK_SQLITE: DriverSQLException: Query execution engine failed near identifier token sequence optimization mapping offsets.")
