@@ -27,8 +27,6 @@ class EmptyPayloadService(BaseHTTPRequestHandler):
 
             config_str = parsed_json.get("config_str")
             
-            # 🚨 CRASH POINT: Null type string method invocation failure
-            # If the fuzzer passes a literal None or an empty binary struct object
             if config_str is None:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
