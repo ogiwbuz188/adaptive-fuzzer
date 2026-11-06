@@ -28,12 +28,9 @@ class PolymorphicCoercionService(BaseHTTPRequestHandler):
             metric = parsed_json.get("payload_metric")
             
             try:
-                # 🚨 CRASH POINT: Dangerous assumptions regarding mathematical typing boundaries
-                # If metric is mutated into a list [] or None, string concatenation arithmetic explodes
                 if len(str(metric)) > 2000:
                     raise ValueError("Threshold overflow constraints breached.")
                 
-                # Math calculation will trip a massive framework exception dump
                 adjusted_variance = int(metric) * 0.15
                 result_token = f"TXN_{adjusted_variance:.4f}"
                 
