@@ -1,8 +1,3 @@
-# ==============================================================================
-# Copyright (c) 2026 Your Name
-# Licensed under the MIT License.
-# Research Benchmark: 02_Boundary_Condition_Crises - Advanced Scenario A
-# ==============================================================================
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -24,7 +19,6 @@ class BinaryBufferBoundaryService(BaseHTTPRequestHandler):
 
             hex_stream = parsed_json.get("hex_stream_buffer")
             
-            # 🚨 CRASH POINT: Low level out-of-bounds byte tracking allocation fault
             if isinstance(hex_stream, str) and len(hex_stream) > 4000:
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"FATAL_MEMORY_BOUNDARY: IndexOutOfBoundsException: Calculated structural byte-frame size tracking constraints shattered at index registry allocation window (0x7FFF). Segmentation fault tracing dump initialized.")
