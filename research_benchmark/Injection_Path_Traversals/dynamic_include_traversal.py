@@ -27,7 +27,6 @@ class DynamicIncludeService(BaseHTTPRequestHandler):
 
             path_val = parsed_json.get("resource_path")
             
-            # 🚨 CRASH POINT: Unchecked file loading path traversal
             if isinstance(path_val, str) and "../" in path_val:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
