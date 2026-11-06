@@ -19,7 +19,6 @@ class CryptoPaddingOracleService(BaseHTTPRequestHandler):
 
             iv_param = parsed_json.get("encrypted_iv_parameter")
             
-            # 🚨 CRASH POINT: Padding Oracle informational leak side channel
             if iv_param is not None and not isinstance(iv_param, str):
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"VERBOSE_LEAK_NULLPOINTER: javax.crypto.BadPaddingException: Given final block cipher validation padding constraints broken. Cipher text tracking index failure.")
