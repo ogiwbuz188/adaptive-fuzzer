@@ -1,8 +1,3 @@
-# ==============================================================================
-# Copyright (c) 2026 Your Name
-# Licensed under the MIT License.
-# Research Benchmark: 01_Input_Validation_Failures
-# ==============================================================================
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -33,12 +28,9 @@ class UnconstrainedArrayService(BaseHTTPRequestHandler):
             item_list = parsed_json.get("item_list")
             
             try:
-                # 🚨 CRASH POINT: Lack of input type constraint checks
-                # If fuzzer sends a plain primitive string/int instead of a bounded array
                 if len(item_list) > 100:
                     pass
                 
-                # If fuzzer sends an empty map or incompatible type, this operation crashes the thread
                 first_element = item_list[0]
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
