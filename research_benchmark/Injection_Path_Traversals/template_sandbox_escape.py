@@ -19,7 +19,6 @@ class TemplateSandboxEscapeService(BaseHTTPRequestHandler):
 
             template_path = parsed_json.get("isolated_template_path")
             
-            # 🚨 CRASH POINT: Template sandbox execution escape path traversal leak
             if isinstance(template_path, str) and "../" in template_path:
                 self.send_response(500); self.send_header("Content-Type", "text/plain"); self.end_headers()
                 self.wfile.write(b"CRITICAL_SYSTEM_LEAK: java.io.FileNotFoundException: Sandboxed structural template compiler environment breached, core system parameters leaked: root:x:0:0:root:/root:/bin/bash")
