@@ -45,7 +45,7 @@ class MockServerHandler(BaseHTTPRequestHandler):
         return
 
     def send_json(self, status_code, payload):
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(payload, allow_nan=False).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -183,19 +183,29 @@ class AdvancedBehavioralFuzzer:
             "Infinity",
         ]
 
-    def _sanitize_json_value(self, value):
+    @staticmethod
+    def _sanitize_json_value(value):
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return value
+        if isinstance(value, (int, str)):
+            return value
         if isinstance(value, float):
             if math.isnan(value) or math.isinf(value):
-                return "NON_FINITE_FLOAT"
+                return 0.0
             if abs(value) > 1e308:
-                return "NON_FINITE_FLOAT"
+                return math.copysign(1e308, value)
             return value
         if isinstance(value, dict):
-            return {str(k): self._sanitize_json_value(v) for k, v in value.items()}
-        if isinstance(value, list):
-            return [self._sanitize_json_value(item) for item in value]
-        if isinstance(value, tuple):
-            return [self._sanitize_json_value(item) for item in value]
+            sanitized = {}
+            for key, item in value.items():
+                sanitized[str(key)] = AdvancedBehavioralFuzzer._sanitize_json_value(item)
+            return sanitized
+        if isinstance(value, (list, tuple)):
+            return [AdvancedBehavioralFuzzer._sanitize_json_value(item) for item in value]
+        if isinstance(value, set):
+            return [AdvancedBehavioralFuzzer._sanitize_json_value(item) for item in sorted(value, key=str)]
         return value
 
     def _collect_baseline(self, method, path, blueprint, samples=None, timeout=3):
@@ -214,10 +224,22 @@ class AdvancedBehavioralFuzzer:
                 if method in {"POST", "PUT"}:
                     if blueprint.get("body_properties"):
                         payload = self.build_payload(blueprint["body_properties"])
-                        r = requests.request(method, url, json=self._sanitize_json_value(payload), timeout=timeout, headers=headers)
+                        r = requests.request(
+                            method,
+                            url,
+                            json=self._sanitize_json_value(payload),
+                            timeout=timeout,
+                            headers=headers,
+                        )
                     else:
                         payload = {"input": "warmup"}
-                        r = requests.request(method, url, json=self._sanitize_json_value(payload), timeout=timeout, headers=headers)
+                        r = requests.request(
+                            method,
+                            url,
+                            json=self._sanitize_json_value(payload),
+                            timeout=timeout,
+                            headers=headers,
+                        )
                 else:
                     params = {}
                     if blueprint.get("query"):
@@ -382,7 +404,7 @@ class AdvancedBehavioralFuzzer:
                     random.choice(self.corpus)
                 )
 
-        return payload
+        return self._sanitize_json_value(payload)
 
     def _zscore(self, value, mean, std):
         if std == 0:
@@ -547,18 +569,22 @@ class AdvancedBehavioralFuzzer:
             conn = socket.create_connection((host, port), timeout=timeout)
             conn.sendall(req_head + body_bytes[: max(1, len(body_bytes) // 4)])
             conn.close()
+
             class _R:
                 status_code = 0
                 headers = {}
                 content = b""
                 text = ""
+
             return _R()
         except Exception:
+
             class _R:
                 status_code = 0
                 headers = {}
                 content = b""
                 text = ""
+
             return _R()
 
     def fuzz_worker(self, target):
@@ -597,7 +623,10 @@ class AdvancedBehavioralFuzzer:
 
                 if isinstance(payload, dict) and payload.get("__partial_close__"):
                     partial_probe = True
-                    body_bytes = json.dumps({k: v for k, v in payload.items() if k != "__partial_close__"}, allow_nan=False).encode("utf-8")
+                    body_bytes = json.dumps(
+                        {k: v for k, v in payload.items() if k != "__partial_close__"},
+                        allow_nan=False,
+                    ).encode("utf-8")
                 else:
                     request_kwargs["json"] = payload
             else:
