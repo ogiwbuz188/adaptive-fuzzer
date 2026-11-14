@@ -183,6 +183,21 @@ class AdvancedBehavioralFuzzer:
             "Infinity",
         ]
 
+    def _sanitize_json_value(self, value):
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                return "NON_FINITE_FLOAT"
+            if abs(value) > 1e308:
+                return "NON_FINITE_FLOAT"
+            return value
+        if isinstance(value, dict):
+            return {str(k): self._sanitize_json_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._sanitize_json_value(item) for item in value]
+        if isinstance(value, tuple):
+            return [self._sanitize_json_value(item) for item in value]
+        return value
+
     def _collect_baseline(self, method, path, blueprint, samples=None, timeout=3):
         samples = samples or self.baseline_samples
         lens = []
@@ -199,10 +214,10 @@ class AdvancedBehavioralFuzzer:
                 if method in {"POST", "PUT"}:
                     if blueprint.get("body_properties"):
                         payload = self.build_payload(blueprint["body_properties"])
-                        r = requests.request(method, url, json=payload, timeout=timeout, headers=headers)
+                        r = requests.request(method, url, json=self._sanitize_json_value(payload), timeout=timeout, headers=headers)
                     else:
                         payload = {"input": "warmup"}
-                        r = requests.request(method, url, json=payload, timeout=timeout, headers=headers)
+                        r = requests.request(method, url, json=self._sanitize_json_value(payload), timeout=timeout, headers=headers)
                 else:
                     params = {}
                     if blueprint.get("query"):
@@ -368,19 +383,6 @@ class AdvancedBehavioralFuzzer:
                 )
 
         return payload
-
-    def _sanitize_json_value(self, value):
-        if isinstance(value, float):
-            if math.isnan(value) or math.isinf(value):
-                return "NON_FINITE_FLOAT"
-            return value
-        if isinstance(value, list):
-            return [self._sanitize_json_value(item) for item in value]
-        if isinstance(value, tuple):
-            return [self._sanitize_json_value(item) for item in value]
-        if isinstance(value, dict):
-            return {str(k): self._sanitize_json_value(v) for k, v in value.items()}
-        return value
 
     def _zscore(self, value, mean, std):
         if std == 0:
@@ -595,7 +597,7 @@ class AdvancedBehavioralFuzzer:
 
                 if isinstance(payload, dict) and payload.get("__partial_close__"):
                     partial_probe = True
-                    body_bytes = json.dumps({k: v for k, v in payload.items() if k != "__partial_close__"}).encode("utf-8")
+                    body_bytes = json.dumps({k: v for k, v in payload.items() if k != "__partial_close__"}, allow_nan=False).encode("utf-8")
                 else:
                     request_kwargs["json"] = payload
             else:
