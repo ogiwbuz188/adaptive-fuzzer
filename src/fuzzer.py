@@ -139,11 +139,11 @@ class AdvancedBehavioralFuzzer:
         self.total_requests = 0
         self.findings_lock = threading.Lock()
 
-        self.baselines = {}  
+        self.baselines = {}
         self.baseline_samples = int(os.environ.get("FUZZ_BASELINE_SAMPLES", "8"))
         self.z_threshold = float(os.environ.get("FUZZ_Z_THRESHOLD", "2.5"))
 
-        self.response_signatures = {}  
+        self.response_signatures = {}
         self.signatures_lock = threading.Lock()
 
         self.interesting_seeds = []
@@ -285,7 +285,7 @@ class AdvancedBehavioralFuzzer:
                 self.baselines[(ep["method"], ep["path"])] = baseline
             except Exception as e:
                 print(f"[-] Baseline collection failed for {ep}: {e}")
-                self.baselines[(ep["method"], ep["path"])]= {
+                self.baselines[(ep["method"], ep["path"])] = {
                     "len_mean": 0,
                     "len_std": 0,
                     "lat_mean": 0,
@@ -337,7 +337,7 @@ class AdvancedBehavioralFuzzer:
             return random.choice([-2147483649, -9223372036854775809, 2**63 - 1, 2**63])
 
         if strategy == "float_edge":
-            return random.choice([float("nan"), float("inf"), -float("inf"), 1e309])
+            return random.choice([0.0, 1.0, -1.0, 1e308, -1e308, 1e-308, -1e-308])
 
         if strategy == "partial_close":
             return {"__partial_close__": True, "data": str(seed)}
@@ -368,6 +368,19 @@ class AdvancedBehavioralFuzzer:
                 )
 
         return payload
+
+    def _sanitize_json_value(self, value):
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                return "NON_FINITE_FLOAT"
+            return value
+        if isinstance(value, list):
+            return [self._sanitize_json_value(item) for item in value]
+        if isinstance(value, tuple):
+            return [self._sanitize_json_value(item) for item in value]
+        if isinstance(value, dict):
+            return {str(k): self._sanitize_json_value(v) for k, v in value.items()}
+        return value
 
     def _zscore(self, value, mean, std):
         if std == 0:
@@ -577,6 +590,8 @@ class AdvancedBehavioralFuzzer:
                             random.choice(self.corpus)
                         )
                     }
+
+                payload = self._sanitize_json_value(payload)
 
                 if isinstance(payload, dict) and payload.get("__partial_close__"):
                     partial_probe = True
@@ -812,7 +827,7 @@ strong {{
 </tr>
 </thead>
 <tbody>
-{"".join(rows)}
+ {"".join(rows)}
 </tbody>
 </table>
 </main>
@@ -824,19 +839,19 @@ strong {{
         os.makedirs("data", exist_ok=True)
         csv_file_path = os.path.join("data", "test_runs.csv")
         file_exists = os.path.exists(csv_file_path)
-        
+
         try:
             with open(csv_file_path, mode="a", newline="", encoding="utf-8") as csv_file:
                 writer = csv.writer(csv_file)
                 if not file_exists:
                     writer.writerow(["Time", "Anomaly Group", "Status", "Context Route", "Payload Trigger"])
-                
+
                 for item in self.findings:
                     writer.writerow([
-                        item['timestamp'], 
-                        item['type'], 
-                        item['status'], 
-                        f"{item['method']} {item['url']}", 
+                        item['timestamp'],
+                        item['type'],
+                        item['status'],
+                        f"{item['method']} {item['url']}",
                         item['payload']
                     ])
             print(f"[+] Data telemetry sheet dynamically appended inside '{csv_file_path}'")
