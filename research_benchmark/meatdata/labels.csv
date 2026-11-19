@@ -1,1 +1,3 @@
-
+benchmark_id,category,expected_vulnerable,vulnerability_class,verification_status,notes
+BOLA_id_enumeration,Broken_object_level_Auth,true,BOLA,independent_review_pending,Cross-user ownership required
+BOLA_id_enumeration02,Broken_object_level_Auth,true,BOLA,independent_review_pending,Cross-user ownership required
