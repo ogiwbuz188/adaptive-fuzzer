@@ -1,0 +1,66 @@
+name: Full Benchmark Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Master random seed
+        required: true
+        default: "1"
+        type: string
+      detector_mode:
+        description: Detector configuration
+        required: true
+        default: statistical
+        type: choice
+        options:
+          - statistical
+          - statistical+fingerprint
+
+concurrency:
+  group: full-benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install Bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Validate manifest and labels
+        run: python -m scripts.check_benchmark_labels
+      - name: Run manifest targets in bounded sandboxes
+        env:
+          FUZZ_SEED: ${{ inputs.seed }}
+          DETECTOR_MODE: ${{ inputs.detector_mode }}
+        run: |
+          python run_test.py \
+            --seed "$FUZZ_SEED" \
+            --run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --detector-mode "$DETECTOR_MODE"
+      - name: Generate plots
+        if: always()
+        run: python notebook/generate_plots.py
+      - name: Archive run data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            data/reports/**
+            data/raw/**
+            data/logs/**
+            data/test_runs.csv
+            notebook/*.png
+          retention-days: 14

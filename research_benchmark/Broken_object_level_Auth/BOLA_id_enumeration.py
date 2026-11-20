@@ -1,52 +1,72 @@
-
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+from urllib.parse import parse_qs, urlsplit
+
+
+OWNED_OBJECTS = {
+    "42": {
+        "id": "42",
+        "owner": "owner",
+        "record": "synthetic owner-only record",
+    }
+}
+
 
 class BOLAEnumerationService(BaseHTTPRequestHandler):
+    def log_message(self, format_string, *args):
+        return
+
+    def _send_json(self, status, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         if self.path == "/swagger.json":
-            schema = {"paths": {"/api/v1/user-lookup": {"post": {"requestBody": {"content": {"application/json": {"schema": {"properties": {"target_account_id": {"type": "integer"}}}}}}}}}}
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(schema).encode())
+            self._send_json(
+                200,
+                {
+                    "paths": {
+                        "/api/v1/user-lookup": {
+                            "get": {
+                                "parameters": [
+                                    {
+                                        "name": "id",
+                                        "in": "query",
+                                        "schema": {"type": "string"},
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+            )
             return
-        self.send_response(404)
-        self.end_headers()
 
-    def do_POST(self):
-        if "/api/v1/user-lookup" in self.path:
-            content_length = int(self.headers.get('Content-Length', 0))
-            body_bytes = self.rfile.read(content_length)
-            try:
-                parsed_json = json.loads(body_bytes.decode('utf-8'))
-            except Exception:
-                self.send_response(400)
-                self.end_headers()
-                return
-
-            account_id = parsed_json.get("target_account_id")
-            
-            if isinstance(account_id, str) and any(sqli in account_id.upper() for sqli in ["UNION", "SELECT", "' OR"]):
-                self.send_response(500)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"SQLITE_EXECUTION_FATAL_ERROR: Unhandled database engine exception: SQLite3Exception: columns parsing validation offset trace failed near index token mapping.")
-                return
-
-            if isinstance(account_id, (dict, list)):
-                self.send_response(500)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(f"INTERNAL DATA LEAKAGE: java.lang.NullPointerException: Object relational validation filter tracking model broken for structural configuration primitive: {str(account_id)}".encode())
-                return
-
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b'{"status": "profile_verified"}')
+        if urlsplit(self.path).path != "/api/v1/user-lookup":
+            self._send_json(404, {"error": "not found"})
             return
+
+        object_id = parse_qs(urlsplit(self.path).query).get("id", [""])[0]
+        principal = {
+            "Bearer owner-token": "owner",
+            "Bearer other-token": "other",
+        }.get(self.headers.get("Authorization"))
+        record = OWNED_OBJECTS.get(object_id)
+
+        if principal is None:
+            self._send_json(401, {"error": "authentication required"})
+        elif record is None:
+            self._send_json(404, {"error": "object not found"})
+        elif principal == "owner" or record["owner"] != principal:
+            # This intentionally vulnerable benchmark returns another user's record.
+            self._send_json(200, record)
+        else:
+            self._send_json(403, {"error": "forbidden"})
+
 
 if __name__ == "__main__":
-    server = HTTPServer(("localhost", 9000), BOLAEnumerationService)
-    print("[*] Broken Object Authorization (BOLA) Target Active on http://localhost:9000")
-    server.serve_forever()
+    HTTPServer(("localhost", 9000), BOLAEnumerationService).serve_forever()

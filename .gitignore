@@ -1,6 +1,14 @@
 
 __pycache__/
 *.py[codz]
+*.out
+*.err
+*_dashboard.html
+data/logs/
+data/raw/
+data/reports/
+data/test_runs.csv
+notebook/*.png
 *$py.class
 
 *.so

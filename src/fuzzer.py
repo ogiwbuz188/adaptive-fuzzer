@@ -20,16 +20,17 @@ import time
 import traceback
 import html
 import math
-import statistics
-import hashlib
 import socket
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import requests
+
+from src.detectors.response_fingerprint import ResponseFingerprintDetector
+from src.detectors.statistical import StatisticalDetector
+from src.telemetry.schema import TelemetryEvent
 
 
 HOST = "127.0.0.1"
@@ -131,20 +132,39 @@ class MockServerHandler(BaseHTTPRequestHandler):
 
 
 class AdvancedBehavioralFuzzer:
-    def __init__(self, base_url, max_workers=5):
+    def __init__(
+        self,
+        base_url,
+        max_workers=5,
+        seed=None,
+        benchmark_id="",
+        run_id="",
+        detector_mode="statistical+fingerprint",
+        telemetry_writer=None,
+    ):
+        if detector_mode not in {"statistical", "statistical+fingerprint"}:
+            raise ValueError(f"Unsupported detector mode: {detector_mode}")
         self.base_url = base_url.rstrip("/")
         self.max_workers = max_workers
+        self.seed = seed
+        self.rng = random.Random(seed)
+        self.benchmark_id = benchmark_id
+        self.run_id = run_id
+        self.detector_mode = detector_mode
+        self.telemetry_writer = telemetry_writer
+        self.request_counter = 0
+        self.request_counter_lock = threading.Lock()
         self.endpoints = []
         self.findings = []
         self.total_requests = 0
         self.findings_lock = threading.Lock()
 
-        self.baselines = {}
         self.baseline_samples = int(os.environ.get("FUZZ_BASELINE_SAMPLES", "8"))
-        self.z_threshold = float(os.environ.get("FUZZ_Z_THRESHOLD", "2.5"))
-
-        self.response_signatures = {}
-        self.signatures_lock = threading.Lock()
+        self.statistical_detector = StatisticalDetector(
+            z_threshold=float(os.environ.get("FUZZ_Z_THRESHOLD", "2.5"))
+        )
+        self.response_fingerprint_detector = ResponseFingerprintDetector()
+        self.response_fingerprint_lock = threading.Lock()
 
         self.interesting_seeds = []
         self.interesting_lock = threading.Lock()
@@ -206,7 +226,7 @@ class AdvancedBehavioralFuzzer:
         ctypes = set()
 
         url = urljoin(self.base_url + "/", path.lstrip("/"))
-        headers = {"User-Agent": random.choice(self.user_agents)}
+        headers = {"User-Agent": self.rng.choice(self.user_agents)}
 
         for _ in range(samples):
             try:
@@ -224,6 +244,14 @@ class AdvancedBehavioralFuzzer:
                         params[blueprint["query"][0]] = "warmup"
                     r = requests.request(method, url, params=params, timeout=timeout, headers=headers)
                 dur = time.time() - start
+                self._record_telemetry(
+                    method,
+                    url,
+                    r.status_code,
+                    dur,
+                    "baseline",
+                    [],
+                )
                 lats.append(dur)
                 statuses.append(r.status_code)
                 cur_len = len(r.content or b"")
@@ -231,19 +259,25 @@ class AdvancedBehavioralFuzzer:
                 ctypes.add(r.headers.get("Content-Type", "").split(";")[0].strip())
                 time.sleep(0.06)
             except Exception:
+                self._record_telemetry(
+                    method,
+                    url,
+                    0,
+                    timeout,
+                    "baseline_error",
+                    [],
+                )
                 lats.append(timeout)
                 lens.append(0)
                 statuses.append(0)
 
-        baseline = {
-            "len_mean": statistics.mean(lens) if lens else 0,
-            "len_std": statistics.pstdev(lens) if len(lens) > 1 else 0,
-            "lat_mean": statistics.mean(lats) if lats else 0,
-            "lat_std": statistics.pstdev(lats) if len(lats) > 1 else 0,
-            "status_counter": Counter(statuses),
-            "content_types": ctypes,
-        }
-        return baseline
+        self.statistical_detector.collect(
+            (method, path),
+            lens,
+            lats,
+            statuses,
+            ctypes,
+        )
 
     def discover_via_spec(self, spec_url):
         print(f"[*] Extracting routes from schema: {spec_url}", flush=True)
@@ -296,25 +330,20 @@ class AdvancedBehavioralFuzzer:
 
         for ep in self.endpoints:
             try:
-                baseline = self._collect_baseline(ep["method"], ep["path"], ep["blueprint"])
-                self.baselines[(ep["method"], ep["path"])] = baseline
+                self._collect_baseline(
+                    ep["method"],
+                    ep["path"],
+                    ep["blueprint"],
+                )
             except Exception as e:
                 print(f"[-] Baseline collection failed for {ep}: {e}")
-                self.baselines[(ep["method"], ep["path"])] = {
-                    "len_mean": 0,
-                    "len_std": 0,
-                    "lat_mean": 0,
-                    "lat_std": 0,
-                    "status_counter": Counter(),
-                    "content_types": set(),
-                }
 
     def mutate(self, seed):
         with self.interesting_lock:
-            if self.interesting_seeds and random.random() < 0.18:
-                seed = random.choice(self.interesting_seeds)
+            if self.interesting_seeds and self.rng.random() < 0.18:
+                seed = self.rng.choice(self.interesting_seeds)
 
-        strategy = random.choice(
+        strategy = self.rng.choice(
             [
                 "overflow",
                 "type_scramble",
@@ -328,31 +357,31 @@ class AdvancedBehavioralFuzzer:
         )
 
         if strategy == "overflow":
-            return str(seed) * random.randint(20, 80)
+            return str(seed) * self.rng.randint(20, 80)
 
         if strategy == "type_scramble":
-            return random.choice(
+            return self.rng.choice(
                 [None, True, False, -1, 999999999999, [], {}]
             )
 
         if strategy == "nested_json":
             return {
-                random.choice(string.ascii_letters): {
-                    random.choice(string.ascii_letters): seed
+                self.rng.choice(string.ascii_letters): {
+                    self.rng.choice(string.ascii_letters): seed
                 }
             }
 
         if strategy == "traversal":
-            return "../" * random.randint(6, 18) + "etc/passwd"
+            return "../" * self.rng.randint(6, 18) + "etc/passwd"
 
         if strategy == "format_string":
-            return "%x%s" * random.randint(4, 16)
+            return "%x%s" * self.rng.randint(4, 16)
 
         if strategy == "int_edge":
-            return random.choice([-2147483649, -9223372036854775809, 2**63 - 1, 2**63])
+            return self.rng.choice([-2147483649, -9223372036854775809, 2**63 - 1, 2**63])
 
         if strategy == "float_edge":
-            return random.choice([0.0, 1.0, -1.0, 1e308, -1e308, 1e-308, -1e-308])
+            return self.rng.choice([0.0, 1.0, -1.0, 1e308, -1e308, 1e-308, -1e-308])
 
         if strategy == "partial_close":
             return {"__partial_close__": True, "data": str(seed)}
@@ -365,8 +394,8 @@ class AdvancedBehavioralFuzzer:
         for key, details in properties.items():
             expected_type = details.get("type", "string")
 
-            if random.random() < 0.30:
-                payload[key] = self.mutate(random.choice(self.corpus))
+            if self.rng.random() < 0.30:
+                payload[key] = self.mutate(self.rng.choice(self.corpus))
             elif expected_type == "object":
                 nested_properties = details.get(
                     "properties",
@@ -375,19 +404,14 @@ class AdvancedBehavioralFuzzer:
                 payload[key] = self.build_payload(nested_properties)
             elif expected_type == "array":
                 payload[key] = [
-                    self.mutate(random.choice(self.corpus))
+                    self.mutate(self.rng.choice(self.corpus))
                 ]
             else:
                 payload[key] = self.mutate(
-                    random.choice(self.corpus)
+                    self.rng.choice(self.corpus)
                 )
 
         return payload
-
-    def _zscore(self, value, mean, std):
-        if std == 0:
-            return abs(value - mean) / (mean + 1)
-        return abs((value - mean) / std)
 
     def log_anomaly(
         self,
@@ -429,11 +453,42 @@ class AdvancedBehavioralFuzzer:
             flush=True,
         )
 
+    def _record_telemetry(
+        self,
+        method,
+        url,
+        status,
+        duration,
+        outcome,
+        anomalies,
+    ):
+        if self.telemetry_writer is None:
+            return
+        if self.seed is None:
+            raise ValueError("A seed is required when request telemetry is enabled")
+
+        with self.request_counter_lock:
+            self.request_counter += 1
+            request_id = f"{self.run_id}-{self.request_counter:06d}"
+
+        self.telemetry_writer.append(
+            TelemetryEvent.create(
+                run_id=self.run_id,
+                benchmark_id=self.benchmark_id,
+                request_id=request_id,
+                seed=self.seed,
+                detector_mode=self.detector_mode,
+                method=method,
+                route=urlparse(url).path,
+                status=status,
+                duration_ms=duration * 1000,
+                outcome=outcome,
+                anomalies=anomalies,
+            )
+        )
+
     def analyze(self, response, duration, method, url, send_payload):
-        """Analyze HTTP response for symptomatic indicators using statistical
-        and heuristic checks. This intentionally searches for symptoms (not
-        specific bug names) so unknown bugs can be discovered.
-        """
+        """Analyze responses with dedicated statistical and fingerprint detectors."""
         anomalies = []
 
         try:
@@ -452,23 +507,20 @@ class AdvancedBehavioralFuzzer:
 
         parsed = urlparse(url)
         path = parsed.path
-        baseline = self.baselines.get((method, path))
-
         cur_len = len(response.content or b"")
-
-        if baseline:
-            size_z = self._zscore(cur_len, baseline.get("len_mean", 0), baseline.get("len_std", 0))
-            lat_z = self._zscore(duration, baseline.get("lat_mean", 0), baseline.get("lat_std", 0))
-
-            if size_z > self.z_threshold:
-                anomalies.append("RESPONSE_SIZE_OUTLIER")
-            if lat_z > self.z_threshold:
-                anomalies.append("LATENCY_OUTLIER")
-
-            ctype = response.headers.get("Content-Type", "").split(";")[0].strip()
-            if baseline.get("content_types") and ctype and ctype not in baseline.get("content_types"):
-                anomalies.append("CONTENTTYPE_MISMATCH")
-        else:
+        content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
+        statistical_anomalies = self.statistical_detector.detect(
+            (method, path),
+            cur_len,
+            duration,
+            status,
+            content_type,
+        )
+        anomalies.extend(
+            "CONTENTTYPE_MISMATCH" if item == "CONTENT_TYPE_MISMATCH" else item
+            for item in statistical_anomalies
+        )
+        if not self.statistical_detector.has_baseline((method, path)):
             if cur_len == 0:
                 anomalies.append("EMPTY_RESPONSE_BODY")
             elif cur_len > 200000:
@@ -512,19 +564,28 @@ class AdvancedBehavioralFuzzer:
             if ("text" in ctype_l or "html" in ctype_l or ctype_l == "") and b"\x00" in (response.content or b""):
                 anomalies.append("BINARY_IN_TEXT_RESPONSE")
 
-        sig = (response.status_code, hashlib.sha256(response.content or b"").hexdigest())
         key = (method, path)
-        with self.signatures_lock:
-            ctr = self.response_signatures.setdefault(key, Counter())
-            ctr[sig] += 1
-            total = sum(ctr.values())
-            top_count = ctr.most_common(1)[0][1] if ctr else 0
-            if total >= 12 and (top_count / total) > 0.80:
-                anomalies.append("INPUT_IGNORED_OR_FILTERED")
+        if self.detector_mode == "statistical+fingerprint":
+            with self.response_fingerprint_lock:
+                anomalies.extend(
+                    self.response_fingerprint_detector.detect(
+                        key,
+                        response.status_code,
+                        response.content,
+                    )
+                )
 
         for anomaly in set(anomalies):
             evidence = response.text[:1000] if hasattr(response, "text") else b""
             self.log_anomaly(anomaly, status, method, url, send_payload, evidence)
+        self._record_telemetry(
+            method,
+            url,
+            status,
+            duration,
+            "anomaly" if anomalies else "normal",
+            anomalies,
+        )
 
     def _send_partial_http(self, url, method, headers, body_bytes, timeout=2):
         """Send a partial HTTP request and close the socket to try to trigger
@@ -568,10 +629,10 @@ class AdvancedBehavioralFuzzer:
         url = urljoin(self.base_url + "/", path.lstrip("/"))
 
         try:
-            time.sleep(random.uniform(0.02, 0.12))
+            time.sleep(self.rng.uniform(0.02, 0.12))
 
             headers = {
-                "User-Agent": random.choice(self.user_agents),
+                "User-Agent": self.rng.choice(self.user_agents),
                 "Accept": "application/json",
             }
 
@@ -589,7 +650,7 @@ class AdvancedBehavioralFuzzer:
                 else:
                     payload = {
                         "input": self.mutate(
-                            random.choice(self.corpus)
+                            self.rng.choice(self.corpus)
                         )
                     }
 
@@ -602,13 +663,13 @@ class AdvancedBehavioralFuzzer:
                     request_kwargs["json"] = payload
             else:
                 if blueprint["query"]:
-                    parameter = random.choice(blueprint["query"])
+                    parameter = self.rng.choice(blueprint["query"])
                 else:
                     parameter = "input"
 
                 payload = {
                     parameter: self.mutate(
-                        random.choice(self.corpus)
+                        self.rng.choice(self.corpus)
                     )
                 }
                 request_kwargs["params"] = payload
@@ -643,6 +704,14 @@ class AdvancedBehavioralFuzzer:
                 "TIMEOUT",
                 str(error),
             )
+            self._record_telemetry(
+                method,
+                url,
+                504,
+                time.time() - start if "start" in locals() else 0,
+                "timeout",
+                ["TIMEOUT_EXHAUSTION"],
+            )
 
         except requests.exceptions.ConnectionError as error:
             self.log_anomaly(
@@ -653,6 +722,14 @@ class AdvancedBehavioralFuzzer:
                 "CONN_ERR",
                 repr(error),
             )
+            self._record_telemetry(
+                method,
+                url,
+                0,
+                0,
+                "connection_error",
+                ["CONNECTION_REFUSED_OR_RESET"],
+            )
 
         except Exception as error:
             self.log_anomaly(
@@ -662,6 +739,14 @@ class AdvancedBehavioralFuzzer:
                 url,
                 "PAYLOAD_ERR",
                 repr(error),
+            )
+            self._record_telemetry(
+                method,
+                url,
+                0,
+                0,
+                "request_error",
+                ["CONNECTION_DROP_OR_DATA_FAULT"],
             )
             traceback.print_exc()
 
@@ -691,7 +776,7 @@ class AdvancedBehavioralFuzzer:
             futures = [
                 executor.submit(
                     self.fuzz_worker,
-                    random.choice(self.endpoints),
+                    self.rng.choice(self.endpoints),
                 )
                 for _ in range(total_runs)
             ]
@@ -712,8 +797,9 @@ class AdvancedBehavioralFuzzer:
                 f"{len(failures)} worker(s) failed"
             )
 
-    def generate_web_dashboard(self, report_name):
+    def generate_web_dashboard(self, report_name, run_status="completed"):
         report_path = Path(report_name)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
 
         rows = []
 
@@ -740,6 +826,7 @@ class AdvancedBehavioralFuzzer:
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="run-status" content="{html.escape(run_status)}">
 <title>Fuzzer Telemetry Dashboard</title>
 <style>
 body {{
@@ -804,7 +891,15 @@ strong {{
 
 <div class="metrics">
 <div class="card">
-<div>Total Requests</div>
+<div>Benchmark</div>
+<div class="number">{html.escape(self.benchmark_id or "unspecified")}</div>
+</div>
+<div class="card">
+<div>Run / seed / detector</div>
+<div>{html.escape(self.run_id or "unspecified")} / {html.escape(str(self.seed))} / {html.escape(self.detector_mode)}</div>
+</div>
+<div class="card">
+<div>Fuzz iterations</div>
 <div class="number">{self.total_requests}</div>
 </div>
 <div class="card">

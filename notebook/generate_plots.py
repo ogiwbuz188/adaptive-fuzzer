@@ -12,6 +12,10 @@
 
 import os
 import pandas as pd
+import matplotlib
+
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 
 def generate_analytics():
@@ -28,7 +32,7 @@ def generate_analytics():
         print("[-] Data log file is empty. No telemetry metrics to graph.")
         return
 
-    os.makedirs("notebooks", exist_ok=True)
+    os.makedirs("notebook", exist_ok=True)
 
     plt.rcParams['text.color'] = '#f8fafc'
     plt.rcParams['axes.labelcolor'] = '#94a3b8'
@@ -43,9 +47,9 @@ def generate_analytics():
     anomaly_counts = df['Anomaly Group'].value_counts()
     anomaly_counts.plot(kind='bar', color='#ef4444', edgecolor='#b91c1c', width=0.6, zorder=3)
     
-    plt.title('Discovered Vulnerability Classification Frequency', fontsize=14, fontweight='bold', pad=15, color='#f8fafc')
-    plt.xlabel('Vulnerability Classification Anomaly Group', fontsize=11, labelpad=10)
-    plt.ylabel('Total Incident Hits Count', fontsize=11, labelpad=10)
+    plt.title('Observed Anomaly Frequency', fontsize=14, fontweight='bold', pad=15, color='#f8fafc')
+    plt.xlabel('Anomaly Group', fontsize=11, labelpad=10)
+    plt.ylabel('Recorded Finding Count', fontsize=11, labelpad=10)
     plt.xticks(rotation=35, ha='right', fontsize=9)
     plt.grid(True, linestyle='--', alpha=0.1, color='#94a3b8', zorder=1)
     
@@ -53,7 +57,7 @@ def generate_analytics():
         ax1.spines[spine].set_color('#233554')
         
     plt.tight_layout()
-    plot1_path = os.path.join("notebooks", "vulnerability_distribution.png")
+    plot1_path = os.path.join("notebook", "anomaly_distribution.png")
     plt.savefig(plot1_path, dpi=300, facecolor='#0b0f19')
     plt.close()
     print(f"[+] Distribution bar chart successfully exported: {plot1_path}")
@@ -77,8 +81,8 @@ def generate_analytics():
     )
     
     plt.title('Microservice Status Responses Distribution Over Session Timeline', fontsize=14, fontweight='bold', pad=15, color='#f8fafc')
-    plt.xlabel('Execution Timeline Stamp (IST Clock Zone Target)', fontsize=11, labelpad=12)
-    plt.ylabel('HTTP Server Protocol Response Code Status', fontsize=11, labelpad=10)
+    plt.xlabel('Recorded timestamp', fontsize=11, labelpad=12)
+    plt.ylabel('HTTP response status', fontsize=11, labelpad=10)
     
     plt.ylim(-50, 550)
     plt.yticks([0, 200, 400, 413, 429, 500])
@@ -99,7 +103,7 @@ def generate_analytics():
         ax2.spines[spine].set_color('#233554')
         
     plt.tight_layout()
-    plot2_path = os.path.join("notebooks", "telemetry_timeline.png")
+    plot2_path = os.path.join("notebook", "telemetry_timeline.png")
     plt.savefig(plot2_path, dpi=300, facecolor='#0b0f19')
     plt.close()
     print(f"[+] Operational timeline tracking plot successfully exported: {plot2_path}")

@@ -3,11 +3,22 @@ import statistics
 
 class StatisticalDetector:
     def __init__(self, z_threshold=2.5):
+        if z_threshold <= 0:
+            raise ValueError("z_threshold must be positive")
         self.z_threshold = z_threshold
         self.baselines = {}
 
     def collect(self, key, response_lengths, durations, statuses,
                 content_types):
+        if not response_lengths:
+            raise ValueError("at least one baseline sample is required")
+        if not (
+            len(response_lengths)
+            == len(durations)
+            == len(statuses)
+        ):
+            raise ValueError("baseline sample collections must have equal lengths")
+
         self.baselines[key] = {
             "length_mean": statistics.mean(response_lengths),
             "length_std": statistics.pstdev(response_lengths),
@@ -16,6 +27,9 @@ class StatisticalDetector:
             "statuses": set(statuses),
             "content_types": set(content_types),
         }
+
+    def has_baseline(self, key):
+        return key in self.baselines
 
     def detect(self, key, response_length, duration, status,
                content_type):
@@ -50,5 +64,5 @@ class StatisticalDetector:
     @staticmethod
     def _zscore(value, mean, std):
         if std == 0:
-            return abs(value - mean) / (mean + 1)
+            return 0.0 if value == mean else float("inf")
         return abs((value - mean) / std)
