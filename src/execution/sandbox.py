@@ -77,7 +77,7 @@ class BubblewrapSandbox:
             "--clearenv",
             "--setenv",
             "PATH",
-            "/usr/bin",
+            "/runtime/bin:/usr/bin",
             "--setenv",
             "PYTHONPATH",
             "/app",
@@ -125,14 +125,19 @@ class BubblewrapSandbox:
     @staticmethod
     def _python_mount():
         prefix = Path(sys.prefix).resolve()
-        executable = Path(sys.executable).absolute()
-        if sys.prefix != sys.base_prefix:
-            return "/venv/bin/python", (prefix, "/venv")
+        base_prefix = Path(sys.base_prefix).resolve()
+        executable = Path(sys.executable).resolve()
 
-        if executable.is_relative_to(Path("/usr")):
-            return str(executable), None
+        if prefix == base_prefix:
+            if executable.is_relative_to(Path("/usr")):
+                return str(executable), None
+            if executable.is_relative_to(prefix):
+                relative_executable = executable.relative_to(prefix)
+                return f"/runtime/{relative_executable}", (prefix, "/runtime")
+            raise RuntimeError("Python executable is outside its runtime prefix")
 
         if not executable.is_relative_to(prefix):
-            raise RuntimeError("Python executable is outside its runtime prefix")
+            raise RuntimeError("Python executable is outside the active virtualenv")
+
         relative_executable = executable.relative_to(prefix)
         return f"/runtime/{relative_executable}", (prefix, "/runtime")
