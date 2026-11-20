@@ -124,15 +124,21 @@ class BubblewrapSandbox:
 
     @staticmethod
     def _python_mount():
+        executable = Path(sys.executable).resolve()
         prefix = Path(sys.prefix).resolve()
-        executable = Path(sys.executable).absolute()
+
         if sys.prefix != sys.base_prefix:
             return "/venv/bin/python", (prefix, "/venv")
 
         if executable.is_relative_to(Path("/usr")):
             return str(executable), None
 
-        if not executable.is_relative_to(prefix):
-            raise RuntimeError("Python executable is outside its runtime prefix")
-        relative_executable = executable.relative_to(prefix)
-        return f"/runtime/{relative_executable}", (prefix, "/runtime")
+        if executable.is_relative_to(prefix):
+            relative_executable = executable.relative_to(prefix)
+            return f"/runtime/{relative_executable}", (prefix, "/runtime")
+
+        hostedtool_prefix = Path("/opt/hostedtoolcache")
+        if executable.is_relative_to(hostedtool_prefix):
+            return str(executable), (hostedtool_prefix, hostedtool_prefix)
+
+        raise RuntimeError("Python executable is outside a supported runtime prefix")
