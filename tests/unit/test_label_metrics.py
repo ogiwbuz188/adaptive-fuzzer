@@ -9,9 +9,13 @@ def test_load_labels():
     assert "BOLA_id_enumeration" in labels
     assert labels["BOLA_id_enumeration"]["vulnerable"] is True
     assert labels["BOLA_id_enumeration"]["verification_status"] == (
-        "independent_review_pending"
+        "source_derived_draft"
     )
-    assert labels["absolute_path_disclosure"]["vulnerable"] is None
+    assert labels["absolute_path_disclosure"]["vulnerable"] is True
+    assert labels["absolute_path_disclosure"]["verification_status"] == (
+        "source_derived_draft"
+    )
+    assert labels["BOLA_id_enumeration02"]["vulnerable"] is False
 
 
 def test_every_benchmark_has_a_label_row():
@@ -20,7 +24,7 @@ def test_every_benchmark_has_a_label_row():
     )
 
     assert benchmark_count == len(load_labels())
-    assert unassigned_count > 0
+    assert unassigned_count == 0
     assert unverified_count == benchmark_count
 
 

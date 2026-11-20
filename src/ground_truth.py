@@ -29,6 +29,7 @@ def load_labels(path=None):
                 ),
                 "class": row["vulnerability_class"],
                 "verification_status": row["verification_status"],
+                "notes": row.get("notes", ""),
             }
 
     if not labels:

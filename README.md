@@ -38,14 +38,17 @@ security scanner.
 - The runner currently uses simple manifest schemas and Swagger discovery; it
   is not a complete OpenAPI implementation. Results may depend on target and
   host behavior even when the seed is fixed.
-- Label rows cover all 100 targets, but 98 expected labels are unassigned and
-  the two expected-positive labels are pending independent review. There are
-  currently zero independently verified labels. Metrics exclude pending and
-  unassigned labels, so the repository currently cannot support a meaningful
-  precision, recall, or F1 claim.
+- The statistical detector now includes robust MAD checks and endpoint baseline
+  drift checks, while preserving separate opt-in fingerprint detection.
+- Label rows cover all 100 targets with source-derived draft labels, but all
+  remain pending independent review. Metrics exclude non-verified labels, so
+  the repository currently cannot support a meaningful precision, recall, or
+  F1 claim.
 - No RESTler integration or controlled comparison is implemented. RESTler is
   not installed in the current environment, and no comparative results are
   reported.
+- BOLA ground-truth labels remain pending independent review; the negative
+  control label now matches the manifest and executable behavior.
 - No complete 100-target run is included in the repository. The manual
   benchmark workflow is configured but has not been run on GitHub Actions.
 - The benchmark programs are synthetic examples. Their names and responses do
@@ -79,6 +82,12 @@ Run the complete inventory with an explicit seed and detector configuration:
 
 ```bash
 python run_test.py --seed 1 --detector-mode statistical
+```
+
+Repeat the same inventory with multiple independent master seeds:
+
+```bash
+python run_test.py --seeds 1 2 3 --detector-mode statistical
 ```
 
 Run a single target as a sandboxed smoke test:

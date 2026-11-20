@@ -286,7 +286,21 @@ class AdvancedBehavioralFuzzer:
         response.raise_for_status()
         spec = response.json()
 
+        def resolve_schema(schema):
+            if not isinstance(schema, dict):
+                return {}
+            while "$ref" in schema:
+                reference = schema["$ref"]
+                if not reference.startswith("#/"):
+                    break
+                target = spec
+                for token in reference[2:].split("/"):
+                    target = target.get(token.replace("~1", "/").replace("~0", "~"), {})
+                schema = target
+            return schema
+
         for path, methods in spec.get("paths", {}).items():
+            path_parameters = methods.get("parameters", [])
             for method, details in methods.items():
                 method = method.upper()
 
@@ -296,20 +310,39 @@ class AdvancedBehavioralFuzzer:
                 blueprint = {
                     "query": [],
                     "body_properties": {},
+                    "headers": {},
+                    "security": details.get("security", spec.get("security", [])),
                 }
 
-                for parameter in details.get("parameters", []):
+                for parameter in (
+                    list(details.get("parameters", []))
+                    + list(path_parameters)
+                ):
+                    parameter = resolve_schema(parameter)
                     if parameter.get("in") in {"query", "formData"}:
-                        blueprint["query"].append(parameter.get("name"))
+                        if parameter.get("name"):
+                            blueprint["query"].append(parameter["name"])
+                    elif parameter.get("in") == "header" and parameter.get("name"):
+                        blueprint["headers"][parameter["name"]] = "warmup"
 
                 request_body = details.get("requestBody", {})
                 content = request_body.get("content", {})
                 json_schema = content.get("application/json", {}).get(
                     "schema", {}
                 )
+                json_schema = resolve_schema(json_schema)
 
                 if "properties" in json_schema:
-                    blueprint["body_properties"] = json_schema["properties"]
+                    blueprint["body_properties"] = {
+                        name: resolve_schema(schema)
+                        for name, schema in json_schema["properties"].items()
+                    }
+                elif json_schema.get("type") == "array":
+                    blueprint["body_properties"] = {
+                        "__array_items__": resolve_schema(
+                            json_schema.get("items", {})
+                        )
+                    }
 
                 self.endpoints.append(
                     {

@@ -14,6 +14,12 @@ The default invocation runs the full inventory sequentially:
 python run_test.py --seed 1 --detector-mode statistical
 ```
 
+Repeat the selected inventory with independent master seeds:
+
+```bash
+python run_test.py --seeds 1 2 3 --detector-mode statistical
+```
+
 For a bounded local smoke test, select one target:
 
 ```bash
@@ -49,6 +55,11 @@ detector mode, manifest, and outputs with any reported result. Compare runs
 only when their target inventory, budgets, environment, and detector
 configuration are compatible. Fixed seeds do not eliminate timing, scheduling,
 or platform variation.
+
+Use `python -m scripts.check_experiment_environment --json` to record commit,
+Python, platform, dependency, Bubblewrap, and RESTler availability. Use
+`python -m scripts.evaluate_run --json <run-id>` only after independent
+ground-truth labels are marked `independently_verified`.
 
 ## Benchmark status
 

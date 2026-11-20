@@ -1,101 +1,101 @@
 benchmark_id,category,expected_vulnerable,vulnerability_class,verification_status,notes
-BOLA_id_enumeration,Broken_object_level_Auth,true,BOLA,independent_review_pending,Cross-user ownership required
-BOLA_id_enumeration02,Broken_object_level_Auth,true,BOLA,independent_review_pending,Cross-user ownership required
-XML_external_entity_coercion,input_validation,,,unreviewed,No expected label assigned; requires review.
-absolute_path_disclosure,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-acl_bitmask_evaluator,object_authorization,,,unreviewed,No expected label assigned; requires review.
-api_key_checksum_verifier,object_authorization,,,unreviewed,No expected label assigned; requires review.
-array_matrix_bounds,input_validation,,,unreviewed,No expected label assigned; requires review.
-backup_manifest_disclosure,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-base64_serialization_corruptor,input_validation,,,unreviewed,No expected label assigned; requires review.
-batch_document_exporter,object_authorization,,,unreviewed,No expected label assigned; requires review.
-binary_buffer_boundary_leak,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-bit_packing_overflow,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-bitwise_flag_dispatcher,input_validation,,,unreviewed,No expected label assigned; requires review.
-bytearray_allocation_boundary,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-composite_key_tampering,object_authorization,,,unreviewed,No expected label assigned; requires review.
-configparser_section_loader,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-cross_tenant_bucket_router,object_authorization,,,unreviewed,No expected label assigned; requires review.
-cryptographic_signature_bypass,object_authorization,,,unreviewed,No expected label assigned; requires review.
-csv_dialect_sniffer,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-csv_formula_injection,input_validation,,,unreviewed,No expected label assigned; requires review.
-cursor_ownership_cursor_filter,object_authorization,,,unreviewed,No expected label assigned; requires review.
-cyclic_reference_exhaustion,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-datetime_cron_parser,input_validation,,,unreviewed,No expected label assigned; requires review.
-delegated_token_unpacker,object_authorization,,,unreviewed,No expected label assigned; requires review.
-direct_ledger_index_lookup,object_authorization,,,unreviewed,No expected label assigned; requires review.
-dynamic_deflate_decompression_bomb,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-dynamic_include_traversal,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-dynamic_module_inclusion,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-dynamic_predicate_evaluator,input_validation,,,unreviewed,No expected label assigned; requires review.
-dynamic_reflection_mapper,input_validation,,,unreviewed,No expected label assigned; requires review.
-empty_payload_handlers,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-encrypted_iv_tampering_oracle,object_authorization,,,unreviewed,No expected label assigned; requires review.
-exponential_buffer_exhaustion,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-exponential_power_accumulator,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-fixed_width_record_unpacker,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-floating_point_precision_lock,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-format_string_compiler,input_validation,,,unreviewed,No expected label assigned; requires review.
-graphql_depth_bomb,input_validation,,,unreviewed,No expected label assigned; requires review.
-graphql_node_id_hijack,object_authorization,,,unreviewed,No expected label assigned; requires review.
-harmonic_series_converger,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-histogram_bucket_divider,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-importlib_module_resolver,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-indirect_reference_mapping,object_authorization,,,unreviewed,No expected label assigned; requires review.
-integer_overfow_routes,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-json_pointer_patcher,input_validation,,,unreviewed,No expected label assigned; requires review.
-jwt_hmac_key_confusion,input_validation,,,unreviewed,No expected label assigned; requires review.
-jwt_none_algorithm_spoofing,object_authorization,,,unreviewed,No expected label assigned; requires review.
-ldap_filter_injection,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-log_injection_resource_disclosure,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-matrix_transpose_bounds,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-memoryview_slice_mutator,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-metadata_schema_pollution,input_validation,,,unreviewed,No expected label assigned; requires review.
-missing_type_casts,input_validation,,,unreviewed,No expected label assigned; requires review.
-multi_field_coercion,input_validation,,,unreviewed,No expected label assigned; requires review.
-nested_tree_validator,input_validation,,,unreviewed,No expected label assigned; requires review.
-nosql_operator_pollution,input_validation,,,unreviewed,No expected label assigned; requires review.
-null_byte_injection_disclosure,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-org_hierarchy_resolver,object_authorization,,,unreviewed,No expected label assigned; requires review.
-os_path_file_reader,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-pagination_cursor_overflow,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-parameter_driven_role_climbing,object_authorization,,,unreviewed,No expected label assigned; requires review.
-parameter_pollution_hash_shadowing,object_authorization,,,unreviewed,No expected label assigned; requires review.
-parameter_pollution_shadowing,input_validation,,,unreviewed,No expected label assigned; requires review.
-pathlib_sandbox_resolver,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-payload_chunk_truncation,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-polymorphic_header_body,input_validation,,,unreviewed,No expected label assigned; requires review.
-polymorphic_type_coercion,input_validation,,,unreviewed,No expected label assigned; requires review.
-recursive_archive_traversal,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-recursive_graph_flattener,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-regex_dynamic_compiler,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-regex_state_machine,input_validation,,,unreviewed,No expected label assigned; requires review.
-relative_directory_traversal,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-ring_buffer_wraparound,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-ring_queue_pop_underflow,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-role_matrix_cell_fetcher,object_authorization,,,unreviewed,No expected label assigned; requires review.
-schema_combinator,input_validation,,,unreviewed,No expected label assigned; requires review.
-session_owner_comparator,object_authorization,,,unreviewed,No expected label assigned; requires review.
-shared_vault_key_merger,object_authorization,,,unreviewed,No expected label assigned; requires review.
-shlex_command_splitter,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-sliding_window_slicer,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-sqlite_dynamic_query_builder,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-ssrf_endpoint_relocation,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-strict_regex_redos_evaluator,input_validation,,,unreviewed,No expected label assigned; requires review.
-string_template_substitutor,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-structural_recursion_overflow,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-template_injection_leak,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-template_sandbox_escape,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-tenant_isolation_leakage,object_authorization,,,unreviewed,No expected label assigned; requires review.
-thread_pool_starvation,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-threshold_range_clipping,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-transaction_token_poisoning,object_authorization,,,unreviewed,No expected label assigned; requires review.
-unconstrained_arrays,input_validation,,,unreviewed,No expected label assigned; requires review.
-unicode_normalization_crash,input_validation,,,unreviewed,No expected label assigned; requires review.
-unsafe_state_deserialization,boundary_condition,,,unreviewed,No expected label assigned; requires review.
-url_query_deserializer,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-uuid_namespace_slicer,object_authorization,,,unreviewed,No expected label assigned; requires review.
-wildcard_scope_escalation,object_authorization,,,unreviewed,No expected label assigned; requires review.
-xml_etree_fragment_parser,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-xslt_stylesheet_injection,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
-zipfile_entry_extractor,injection_path_traversal,,,unreviewed,No expected label assigned; requires review.
+binary_buffer_boundary_leak,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+bit_packing_overflow,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+bytearray_allocation_boundary,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+cyclic_reference_exhaustion,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+dynamic_deflate_decompression_bomb,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+empty_payload_handlers,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+exponential_buffer_exhaustion,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+exponential_power_accumulator,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+fixed_width_record_unpacker,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+floating_point_precision_lock,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+harmonic_series_converger,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+histogram_bucket_divider,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+integer_overfow_routes,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+matrix_transpose_bounds,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+memoryview_slice_mutator,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+pagination_cursor_overflow,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+payload_chunk_truncation,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+recursive_graph_flattener,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+ring_buffer_wraparound,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+ring_queue_pop_underflow,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+sliding_window_slicer,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+structural_recursion_overflow,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+thread_pool_starvation,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+threshold_range_clipping,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+unsafe_state_deserialization,Boundary_Condition_Crises,true,Boundary_Condition_Crises,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+BOLA_id_enumeration,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived from benchmark authorization scenario; not independently reviewed.
+BOLA_id_enumeration02,Broken_object_level_Auth,false,Broken_object_level_Auth,source_derived_draft,Source-derived from benchmark authorization scenario; not independently reviewed.
+acl_bitmask_evaluator,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+api_key_checksum_verifier,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+batch_document_exporter,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+composite_key_tampering,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+cross_tenant_bucket_router,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+cryptographic_signature_bypass,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+cursor_ownership_cursor_filter,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+delegated_token_unpacker,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+direct_ledger_index_lookup,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+encrypted_iv_tampering_oracle,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+graphql_node_id_hijack,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+indirect_reference_mapping,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+jwt_none_algorithm_spoofing,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+org_hierarchy_resolver,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+parameter_driven_role_climbing,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+parameter_pollution_hash_shadowing,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+role_matrix_cell_fetcher,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+session_owner_comparator,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+shared_vault_key_merger,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+tenant_isolation_leakage,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+transaction_token_poisoning,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+uuid_namespace_slicer,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+wildcard_scope_escalation,Broken_object_level_Auth,true,Broken_object_level_Auth,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+absolute_path_disclosure,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+backup_manifest_disclosure,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+configparser_section_loader,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+csv_dialect_sniffer,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+dynamic_include_traversal,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+dynamic_module_inclusion,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+importlib_module_resolver,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+ldap_filter_injection,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+log_injection_resource_disclosure,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+null_byte_injection_disclosure,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+os_path_file_reader,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+pathlib_sandbox_resolver,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+recursive_archive_traversal,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+regex_dynamic_compiler,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+relative_directory_traversal,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+shlex_command_splitter,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+sqlite_dynamic_query_builder,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+ssrf_endpoint_relocation,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+string_template_substitutor,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+template_injection_leak,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+template_sandbox_escape,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+url_query_deserializer,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+xml_etree_fragment_parser,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+xslt_stylesheet_injection,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+zipfile_entry_extractor,Injection_Path_Traversals,true,Injection_Path_Traversals,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+XML_external_entity_coercion,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+array_matrix_bounds,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+base64_serialization_corruptor,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+bitwise_flag_dispatcher,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+csv_formula_injection,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+datetime_cron_parser,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+dynamic_predicate_evaluator,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+dynamic_reflection_mapper,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+format_string_compiler,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+graphql_depth_bomb,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+json_pointer_patcher,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+jwt_hmac_key_confusion,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+metadata_schema_pollution,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+missing_type_casts,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+multi_field_coercion,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+nested_tree_validator,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+nosql_operator_pollution,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+parameter_pollution_shadowing,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+polymorphic_header_body,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+polymorphic_type_coercion,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+regex_state_machine,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+schema_combinator,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+strict_regex_redos_evaluator,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+unconstrained_arrays,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.
+unicode_normalization_crash,input_validation_failure,true,input_validation_failure,source_derived_draft,Source-derived draft: synthetic target belongs to a vulnerability category; not independently reviewed.

@@ -28,6 +28,12 @@ def _parse_args(argv=None):
     )
     parser.add_argument("--data-directory", default=str(ROOT / "data"))
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        help="Run the selected benchmark set independently for each seed.",
+    )
     parser.add_argument("--run-id", default=uuid.uuid4().hex)
     parser.add_argument("--benchmark-id", action="append")
     parser.add_argument("--max-targets", type=int)
@@ -41,7 +47,8 @@ def _parse_args(argv=None):
 
 def main(argv=None):
     args = _parse_args(argv)
-    if args.seed < 0:
+    master_seeds = args.seeds if args.seeds is not None else [args.seed]
+    if any(seed < 0 for seed in master_seeds):
         raise ValueError("seed must be non-negative")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id) or args.run_id in {
         ".",
@@ -66,39 +73,52 @@ def main(argv=None):
     if args.max_targets is not None:
         benchmarks = benchmarks[: args.max_targets]
 
-    print(
-        f"Run {args.run_id}: seed={args.seed}, detector={args.detector_mode}, "
-        f"targets={len(benchmarks)}"
-    )
     runner = BenchmarkRunner(ROOT, args.data_directory)
-    results = []
-    for benchmark in benchmarks:
-        seed = _seed_for_benchmark(args.seed, benchmark.benchmark_id)
-        result = runner.run(
-            benchmark,
-            seed=seed,
-            run_id=args.run_id,
-            detector_mode=args.detector_mode,
-        )
-        results.append(result)
+    overall_succeeded = True
+    for master_seed in master_seeds:
+        run_id = args.run_id
+        if len(master_seeds) > 1:
+            run_id = f"{args.run_id}-seed-{master_seed}"
+
         print(
-            f"{benchmark.benchmark_id}: "
-            f"{'completed' if result.succeeded else 'failed'} "
-            f"(exit={result.exit_code}, "
-            f"duration={result.duration_seconds:.2f}s, seed={seed})"
+            f"Run {run_id}: seed={master_seed}, "
+            f"detector={args.detector_mode}, targets={len(benchmarks)}"
         )
+        results = []
+        for benchmark in benchmarks:
+            seed = _seed_for_benchmark(master_seed, benchmark.benchmark_id)
+            result = runner.run(
+                benchmark,
+                seed=seed,
+                run_id=run_id,
+                detector_mode=args.detector_mode,
+            )
+            results.append(result)
+            print(
+                f"{benchmark.benchmark_id}: "
+                f"{'completed' if result.succeeded else 'failed'} "
+                f"(exit={result.exit_code}, "
+                f"duration={result.duration_seconds:.2f}s, seed={seed})"
+            )
 
-    report_directory = (
-        Path(args.data_directory) / "reports" / args.run_id
-    )
-    try:
-        report_count = validate_reports(benchmarks, report_directory)
-        print(f"Validated {report_count} completed reports for run {args.run_id}.")
-    except ValueError as error:
-        print(f"Report validation failed: {error}", file=sys.stderr)
-        return 1
+        report_directory = (
+            Path(args.data_directory) / "reports" / run_id
+        )
+        try:
+            report_count = validate_reports(benchmarks, report_directory)
+            print(
+                f"Validated {report_count} completed reports "
+                f"for run {run_id}."
+            )
+        except ValueError as error:
+            print(f"Report validation failed: {error}", file=sys.stderr)
+            overall_succeeded = False
+            continue
 
-    return 0 if all(result.succeeded for result in results) else 1
+        if not all(result.succeeded for result in results):
+            overall_succeeded = False
+
+    return 0 if overall_succeeded else 1
 
 
 if __name__ == "__main__":

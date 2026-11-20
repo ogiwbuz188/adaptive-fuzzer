@@ -6,6 +6,7 @@ import resource
 import signal
 import subprocess
 import time
+import uuid
 
 from .manifest import Benchmark
 from .sandbox import BubblewrapSandbox
@@ -42,6 +43,45 @@ class BenchmarkRunner:
         self.memory_limit_bytes = memory_limit_bytes
         self.cpu_limit_seconds = cpu_limit_seconds
         self.file_limit_bytes = file_limit_bytes
+        self.cgroup_root = Path("/sys/fs/cgroup")
+        self.cgroup_directory = None
+
+    def _create_cgroup(self, run_id, benchmark_id):
+        if not (self.cgroup_root / "cgroup.controllers").is_file():
+            return None
+        try:
+            parent = self.cgroup_root / "adaptive-fuzzer"
+            parent.mkdir(parents=True, exist_ok=True)
+            directory = parent / (
+                f"{run_id}-{benchmark_id}-{uuid.uuid4().hex[:8]}"
+            )
+            directory.mkdir(parents=True, exist_ok=False)
+            (directory / "memory.max").write_text(
+                str(self.memory_limit_bytes),
+                encoding="ascii",
+            )
+            quota = min(self.cpu_limit_seconds, 60) * 1000
+            (directory / "cpu.max").write_text(
+                f"{quota} 100000",
+                encoding="ascii",
+            )
+            (directory / "pids.max").write_text("128", encoding="ascii")
+            return directory
+        except (OSError, PermissionError):
+            return None
+
+    def _attach_cgroup(self, directory, process):
+        if directory is None:
+            return
+        try:
+            (directory / "cgroup.procs").write_text(
+                str(process.pid),
+                encoding="ascii",
+            )
+        except (OSError, PermissionError) as error:
+            raise RuntimeError(
+                f"Could not attach benchmark process to cgroup: {error}"
+            )
 
     def run(self, benchmark, seed, run_id, detector_mode):
         if not isinstance(benchmark, Benchmark):
@@ -70,22 +110,34 @@ class BenchmarkRunner:
             with stdout_path.open("wb") as stdout, stderr_path.open(
                 "wb"
             ) as stderr:
-                process = subprocess.Popen(
-                    command,
-                    cwd=self.repository_root,
-                    stdout=stdout,
-                    stderr=stderr,
-                    start_new_session=True,
-                    preexec_fn=self._set_resource_limits,
+                cgroup_directory = self._create_cgroup(
+                    run_id,
+                    benchmark.benchmark_id,
                 )
                 try:
-                    exit_code = process.wait(
-                        timeout=benchmark.timeout_seconds
+                    process = subprocess.Popen(
+                        command,
+                        cwd=self.repository_root,
+                        stdout=stdout,
+                        stderr=stderr,
+                        start_new_session=True,
+                        preexec_fn=self._set_resource_limits,
                     )
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    self._stop_process_group(process)
-                    exit_code = process.returncode or 124
+                    self._attach_cgroup(cgroup_directory, process)
+                    try:
+                        exit_code = process.wait(
+                            timeout=benchmark.timeout_seconds
+                        )
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                        self._stop_process_group(process)
+                        exit_code = process.returncode or 124
+                finally:
+                    if cgroup_directory is not None:
+                        try:
+                            cgroup_directory.rmdir()
+                        except (OSError, PermissionError):
+                            pass
         except OSError as error:
             exit_code = 127
             stderr_path.write_text(str(error), encoding="utf-8")

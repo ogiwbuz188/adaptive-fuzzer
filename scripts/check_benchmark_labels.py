@@ -35,6 +35,21 @@ def check_label_completeness():
             f"{len(unexpected)} unexpected"
         )
 
+    for benchmark in benchmarks:
+        for scenario in benchmark.authorization_scenarios:
+            label = labels.get(benchmark.benchmark_id)
+            if (
+                label is not None
+                and label["vulnerable"] is not None
+                and label["vulnerable"] != scenario.expected_vulnerable
+            ):
+                raise ValueError(
+                    f"BOLA label/manifest mismatch for "
+                    f"{benchmark.benchmark_id}: label="
+                    f"{label['vulnerable']}, manifest="
+                    f"{scenario.expected_vulnerable}"
+                )
+
     unassigned = sum(label["vulnerable"] is None for label in labels.values())
     unverified = sum(
         label["verification_status"] != "independently_verified"

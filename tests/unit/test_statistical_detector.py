@@ -27,6 +27,27 @@ def test_collect_baseline_and_detect_new_status():
     assert anomalies == ["NEW_HTTP_STATUS"]
 
 
+def test_detector_does_not_flag_lower_response_values_as_outliers():
+    detector = StatisticalDetector(z_threshold=2.5)
+    detector.collect(
+        ("POST", "/api/v1/test"),
+        [100, 101, 99],
+        [0.1, 0.11, 0.09],
+        [200, 200, 200],
+        ["application/json"],
+    )
+
+    anomalies = detector.detect(
+        ("POST", "/api/v1/test"),
+        1,
+        0.001,
+        200,
+        "application/json",
+    )
+
+    assert anomalies == []
+
+
 def test_fuzzer_delegates_statistical_checks_to_detector():
     fuzzer = AdvancedBehavioralFuzzer("http://127.0.0.1:9000")
     key = ("GET", "/api/v1/test")

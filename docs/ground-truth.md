@@ -6,9 +6,11 @@ evidence that the labels themselves are correct.
 
 Current status:
 
-- 98 targets have no expected vulnerability label assigned.
-- Two expected-positive labels are marked as pending independent review.
-- No target is marked `independently_verified`.
+- All 100 targets have source-derived draft labels.
+- Source-derived labels are preliminary and not independent verification.
+- The independent-review template contains one row for every target.
+- No target is marked `independently_verified` until two distinct reviewers
+  approve it with an evidence reference.
 
 [`calculate_metrics`](../src/ground_truth.py) includes a row only when it has an assigned
 expected label and `verification_status` is exactly

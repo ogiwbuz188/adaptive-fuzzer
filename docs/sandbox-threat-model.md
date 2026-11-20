@@ -26,6 +26,12 @@ address space, and file size are limited per process, so those limits are not
 aggregate quotas for every descendant process. A benchmark may still exercise
 kernel attack surface or cause host load before the wall-clock timeout.
 
+When the host exposes an accessible cgroup v2 hierarchy, `BenchmarkRunner`
+also attempts to create a per-run cgroup and set aggregate CPU, memory, and
+PID limits. Cgroup support is best-effort and may be unavailable in containers
+or restricted hosts. Failure to create or attach a cgroup does not silently
+disable Bubblewrap or the per-process limits.
+
 Some host runtime files and system libraries are intentionally visible inside
 the namespace. The sandbox is designed for the repository's synthetic
 benchmarks, not arbitrary third-party code. Use a disposable machine for

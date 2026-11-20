@@ -1,7 +1,7 @@
 
 from pathlib import Path
 
-from run_test import _seed_for_benchmark
+from run_test import _parse_args, _seed_for_benchmark
 from src.execution.manifest import load_manifest
 
 
@@ -28,3 +28,10 @@ def test_target_seed_is_stable_and_target_specific():
 
     assert seed == _seed_for_benchmark(9, "missing_type_casts")
     assert seed != _seed_for_benchmark(9, "BOLA_id_enumeration")
+
+
+def test_parse_multiple_master_seeds():
+    args = _parse_args(["--seed", "1", "--seeds", "1", "2", "7"])
+
+    assert args.seed == 1
+    assert args.seeds == [1, 2, 7]
