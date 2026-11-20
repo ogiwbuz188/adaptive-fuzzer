@@ -1,278 +1,305 @@
-#Adaptive Behavioral Fuzzer
+# Adaptive Behavioral Fuzzer
 
-[!\[License: Apache-2.0\]\(https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE.md)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE.md)
+[![Python](https://img.shields.io/badge/Python-100%25-3776AB.svg)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/Platform-Linux-FCC624.svg)](https://linux.org/)
 
-Adaptive Behavioral Fuzzer is a research prototype for executing a controlled inventory of synthetic API benchmark programs in bounded Linux sandboxes, exercising selected cross-user authorization scenarios, and collecting request-level telemetry.It combines statistical response-deviation checks with an optional response-fingerprint detector.
+**Adaptive Behavioral Fuzzer** is a research-oriented API fuzzing prototype designed to study whether execution-state deviations and runtime anomalies can expose potentially security-relevant behavior in synthetic REST API targets.
 
-Research-use notice: This project is intended for academic research, experimentation, and evaluation on the synthetic benchmark targets included in this repository or on systems for which you have explicit authorization. It is not a validated general-purpose security scanner, penetration-testing product, or guarantee of vulnerability detection. Do not run it against third-party services without permission.
+The system uses manifest-driven route selection, sandboxed benchmark execution, deterministic seed generation, structured request telemetry, behavioral detectors, and repeatable evaluation workflows. It includes a 100-target benchmark suite spanning authorization, boundary-condition, path-traversal, and input-validation scenarios.
 
-Contents
-- Project goals
-- What is implemented
-- Benchmark inventory
-- How it works
-- Requirements
-- Installation
-- Running the benchmark
-- Validating and evaluating results
-- Outputs
-- Reproducibility
-- Research status and limitations
-- Development with LLMs and coding agents
-- Repository structure
-- Contributing
-- License
-- Citation
+> [!IMPORTANT]
+> This project is intended for authorized research and testing only. A behavioral anomaly is **not automatically a vulnerability**. Detected findings must be independently reviewed and validated against a defined security property. Use only synthetic targets or systems where testing has been explicitly authorized.
 
-#Project goals#
+## Key Capabilities
 
-The project explores whether endpoint-specific behavioral deviations can provide useful signals during repeatable API security experiments. Its goals are to:
+- **Manifest-driven benchmarks** — Executes a canonical inventory of 100 synthetic API targets.
+- **Sandboxed execution** — Runs benchmark targets and local fuzzer workers inside separate Bubblewrap Linux namespaces.
+- **Deterministic experiments** — Derives per-target seeds from a master seed and stable benchmark identifier.
+- **Behavioral detection** — Supports statistical response analysis and an optional response-fingerprint detector.
+- **Authorization scenarios** — Exercises selected owner-versus-other-user access patterns for synthetic BOLA fixtures.
+- **Structured telemetry** — Preserves request-level JSONL events, process logs, reports, dashboards, and run identifiers.
+- **Reproducible evaluation** — Validates report completeness and evaluates only independently verified labels.
+- **CI/CD integration** — Includes automated tests, consistency checks, and a manually triggered benchmark workflow.
 
-1. Run a manifest-defined set of synthetic API targets under bounded Linux isolation.
-2. Exercise request mutation and collect structured, request-level observations.
-3. Compare response behavior against endpoint baselines using statistical heuristics.
-4. Optionally use response fingerprints as an additional anomaly signal.
-5. Exercise explicitly configured owner/other-user authorization scenarios.
-6. Preserve run identifiers, seeds, logs, reports, and telemetry to support later analysis.
+## Benchmark Inventory
 
-The detector reports behavioral anomalies. An anomaly is not automatically a security vulnerability. Security conclusions require evidence of a violated security property and independently reviewed benchmark ground truth.
+The complete benchmark inventory is defined in [`research_benchmark/manifest.yaml`](research_benchmark/manifest.yaml).
 
-#What is implemented
+| Benchmark category | Synthetic targets |
+|---|---:|
+| Broken Object Level Authorization (BOLA) | 25 |
+| Boundary-condition cases | 25 |
+| Path traversal and information-disclosure cases | 25 |
+| Input-validation cases | 25 |
+| **Total** | **100** |
 
-- Manifest-driven benchmark execution. [`research_benchmark/manifest.yaml`](research_benchmark/manifest.yaml) is the canonical inventory. It defines stable target IDs, Python entrypoints, HTTP routes and methods, ports, request budgets, timeouts, and any configured authorization scenarios.
-- Serial sandboxed runner. [`run_test.py`](run_test.py) runs selected targets sequentially. Each target and its local fuzzer worker execute inside a separate Bubblewrap namespace. The sandbox uses private networking, read-only mounts for project source and benchmark code, a writable data mount, and process resource limits. The runner fails if Bubblewrap is unavailable or unusable; it does not silently fall back to an ordinary subprocess.
-- Two detector configurations. statistical is the default. statistical+fingerprint enables the optional response-fingerprint detector in addition to statistical checks. The statistical implementation includes robust median absolute deviation (MAD) checks and endpoint baseline-drift checks.
-- Selected BOLA fixtures. Two synthetic owner-versus-other-user scenarios exercise the same known object with distinct credentials. One fixture permits cross-user access and the other denies it. The check is limited to these explicitly configured scenarios; it is not a general authorization model or proof of BOLA coverage across arbitrary APIs.
-- Structured telemetry and reports. Request-level JSONL events are written under data/raw/; per-target dashboards are written under data/reports/<run-id>/; process logs are written under data/logs/<run-id>/; and a legacy anomaly CSV is maintained at data/test_runs.csv.
-- Dataset and label checks. Scripts check manifest/label inventory consistency and verify that a run has exactly one completed report for every selected target.
-- Evaluation safeguards. The evaluation pipeline only includes labels whose verification status is independently_verified. Draft labels are excluded from accuracy metrics.
-- Experiment utilities. The repository includes tools for recording environment information, evaluating a run, aggregating evaluation outputs, and preparing explicit mappings for a future RESTler comparison.
+The default configuration specifies 40 fuzzing iterations per target, a 10-second startup timeout, and a 90-second target wall-clock timeout. These values control benchmark execution; they do not represent real-world vulnerability prevalence or guaranteed detection performance.
 
-#Benchmark inventory
-The manifest contains 100 synthetic targets, organized into four groups of 25:
+## How It Works
 
-Benchmark group	                                  Targets
-Broken Object Level Authorization (BOLA)	          25
-Boundary-condition cases	                         25
-Path traversal and information-disclosure cases	    25
-Input-validation cases	                            25
-Total	                                              100
+1. The runner loads and validates the benchmark manifest.
+2. A master seed produces deterministic, target-specific seeds.
+3. Bubblewrap starts the benchmark target and fuzzer worker in isolated namespaces.
+4. Route metadata is loaded from the manifest and supplemented by Swagger-assisted discovery.
+5. Requests are mutated and sent against the target while response characteristics are recorded.
+6. Statistical checks classify response deviations; fingerprint mode adds repeated-response analysis.
+7. Request-level telemetry, process logs, reports, and dashboards are preserved by run ID.
+8. The runner validates that each selected target produced exactly one completed report.
 
+For component details and execution flow, see [`docs/architecture.md`](docs/architecture.md).
 
-The manifest currently configures 40 fuzzing iterations per target, a 10-second startup timeout, and a 90-second target wall-clock timeout. These are benchmark configuration values, not a claim that every request or target completes successfully. See [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md) for the run protocol.
+## Requirements
 
-The benchmark programs are synthetic research fixtures. Category names and target names describe intended test themes; they do not establish real-world vulnerability prevalence or independently verified vulnerability labels.
+### Supported Environment
 
-#How it works
+- Linux host, with Ubuntu or Debian recommended
+- Python 3.11
+- Bubblewrap (`bwrap`) installed and usable by the current user
+- Git
+- Python packages listed in [`requirements.txt`](requirements.txt)
 
-At a high level, a run follows this sequence:
+Bubblewrap is Linux-specific. Native execution is not supported on Windows or macOS. A Linux virtual machine or Linux-based container may be used, subject to namespace permissions and host security policy.
 
-1. Load and validate the manifest. The runner reads the selected target definitions and validates requested benchmark IDs.
-2. Derive per-target seeds. A target seed is deterministically derived from the master seed and stable benchmark ID.
-3. Start the isolated target. The runner launches the target and local fuzzer in a Bubblewrap namespace and waits for service readiness.
-4. Discover route metadata. The current implementation uses the manifest route and Swagger-assisted discovery. It is not a complete OpenAPI parser or general microservice crawler.
-5. Establish response baselines and exercise requests. The fuzzer sends the configured requests and records response characteristics.
-6. Classify behavioral deviations. Statistical checks identify response deviations; the optional fingerprint mode adds repeated-response fingerprint signals. Configured BOLA fixtures are evaluated through their explicit owner/other-user scenario.
-7. Write evidence artifacts. Telemetry, target reports, and process logs are stored using the run ID.
-8. Validate run completion. The CLI checks that each selected target has one completed report and exits unsuccessfully if targets or reports fail.
+### Ubuntu or Debian
 
-For implementation details, see [`docs/architecture.md`](docs/architecture.md).
-
-#Requirements
-
-Supported environment
-
-- Linux host (Ubuntu or Debian is a convenient starting point).
-- Python 3.11 (the CI workflows are configured for Python 3.11).
-- Bubblewrap (bwrap) installed and usable by the current user.
-- Git, for cloning the repository and recording the source revision.
-- Python dependencies listed in requirements.txt or requirements-dev.txt.
-
-Bubblewrap is Linux-specific. Running the project under Windows or macOS directly is not supported by the sandbox runner. A Linux virtual machine is an option where a native Linux host is unavailable, provided Bubblewrap and the required namespace features are enabled inside that VM.
-
-#System dependencies
-
-On Ubuntu/Debian:
-
+```bash
 sudo apt-get update
 sudo apt-get install --yes python3.11 python3.11-venv python3-pip bubblewrap git
 
-Your distribution may provide Python 3.11 under a versioned package name or may require installation from its supported package source. Confirm that python3.11 and bwrap are available:
-
 python3.11 --version
 bwrap --version
+```
 
-Bubblewrap can be restricted by host security policy, container configuration, or kernel settings. Installing the executable alone does not guarantee that it can create the namespaces this project needs.
+Installing Bubblewrap does not guarantee that namespace creation is permitted by the host kernel, container runtime, or system security policy.
 
-Installation
+## Installation
 
-Clone the repository and enter its directory:
+```bash
 git clone https://github.com/ogiwbuz188/adaptive-fuzzer.git
 cd adaptive-fuzzer
-
-Create and activate a virtual environment:
 
 python3.11 -m venv .venv
 source .venv/bin/activate
 
-Install the development dependencies (this also installs the runtime dependencies):
-
 python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-For runtime-only use, install:
 python -m pip install -r requirements.txt
+```
 
-Check the experiment environment and validate manifest/label inventory consistency:
+For test and development dependencies:
 
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+Validate the local environment and benchmark metadata before an experiment:
+
+```bash
 python -m scripts.check_experiment_environment --json
 python -m scripts.check_benchmark_labels
+```
 
-The label check validates inventory consistency and allowed metadata values. It does not independently verify the expected vulnerability status of each target.
+The label check verifies inventory consistency and allowed metadata values. It does not independently establish the vulnerability status of each target.
 
-#Running the benchmark
+## Running the Benchmark
 
-Run the full 100-target inventory with a master seed and the default statistical detector:
+Run the complete 100-target benchmark:
 
+```bash
 python run_test.py --seed 1 --detector-mode statistical
-Run the inventory independently with multiple master seeds:
+```
+
+Run a benchmark independently with multiple master seeds:
+
+```bash
 python run_test.py --seeds 1 2 3 --detector-mode statistical
+```
+
 Enable the optional response-fingerprint detector:
+
+```bash
 python run_test.py --seed 1 --detector-mode statistical+fingerprint
-Run one target as a sandboxed smoke test:
+```
+
+Run one target as a smoke test:
+
+```bash
 python run_test.py --seed 1 --benchmark-id missing_type_casts
-Run a bounded subset of the manifest:
+```
+
+Run a bounded subset:
+
+```bash
 python run_test.py --seed 1 --max-targets 5
+```
 
-The runner prints a run ID. You can provide your own unique run ID with --run-id:
+Provide a stable run identifier:
 
+```bash
 python run_test.py --seed 1 --run-id local-smoke-001
+```
 
-The available command-line options can also be viewed with:
+Display all command-line options:
 
+```bash
 python run_test.py --help
+```
 
-Resource note: A full run may take a substantial amount of time because targets are executed serially and each target has its own startup and execution limits. Start with a single-target smoke test before launching the complete suite.
+> [!NOTE]
+> The full suite executes serially and may take substantial time. Begin with a single-target smoke test before running the complete inventory.
 
-#Validating and evaluating results
+## Validation and Evaluation
 
-Validate report completeness
-After a run, substitute the run ID printed by the runner:
+### Validate report completeness
 
+```bash
 python -m scripts.validate_dataset --run-id <run-id>
-Validation checks that each selected target has exactly one completed report. A successful report-completeness check is not a detection-accuracy result.
-Inspect anomaly summaries
+```
 
-Generate plots from the recorded anomaly CSV:
+This command confirms that every selected target produced exactly one completed report. Report completeness does not imply detection accuracy or confirmed vulnerabilities.
 
+### Generate anomaly plots
+
+```bash
 python notebook/generate_plots.py
-These plots summarize recorded anomalies and response statuses. They must not be described as counts of independently confirmed vulnerabilities.
-Evaluate against independently verified labels
+```
 
-The evaluation command is:
+Generated plots summarize recorded anomalies and response statuses. They must not be interpreted as independently confirmed vulnerability counts.
 
+### Evaluate against verified labels
+
+```bash
 python -m scripts.evaluate_run --json <run-id>
+```
 
-The evaluator excludes labels unless verification_status is exactly independently_verified. The current research_benchmark/metadata/labels.csv contains source-derived draft labels pending independent review; therefore, the repository's current label set does not support meaningful precision, recall, F1-score, or confusion-matrix claims. The evaluator is designed to refuse unsupported accuracy reporting rather than treating draft labels as ground truth.
+The evaluator excludes labels unless `verification_status` is exactly `independently_verified`. The current benchmark metadata contains source-derived draft labels rather than an independently verified ground-truth dataset.
 
-See [`docs/ground-truth.md`](docs/ground-truth.md) for the label-review process and [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md) for the experimental protocol.
-Outputs
-By default, run artifacts are written under data/:
-Path	Contents
-data/raw/<run-id>.jsonl	Versioned request-level telemetry
-data/reports/<run-id>/	Per-target reports and dashboards
-data/logs/<run-id>/	Target and worker process logs
-data/test_runs.csv	Legacy anomaly summary CSV
+See [`docs/ground-truth.md`](docs/ground-truth.md) for the verification process and [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md) for the experimental protocol.
 
+## Output Structure
 
-Keep the run ID, Git commit, master seed, detector mode, manifest, Python version, dependency versions, operating system, and generated artifacts together when retaining or sharing experimental results. Review telemetry and logs for sensitive information before publishing or uploading them.
-Reproducibility
-The runner executes targets serially, uses a fixed per-target request budget from the manifest, derives target seeds from the master seed and benchmark ID, and enforces startup and wall-clock timeouts. These controls support repeatable experiment configuration, but they do not make response timing, operating-system scheduling, or host behavior deterministic.
+By default, run artifacts are written beneath `data/`:
 
-Capture the environment before an experiment:
+| Path | Description |
+|---|---|
+| `data/raw/<run-id>.jsonl` | Versioned, request-level telemetry |
+| `data/reports/<run-id>/` | Per-target reports and dashboards |
+| `data/logs/<run-id>/` | Target and fuzzer process logs |
+| `data/test_runs.csv` | Legacy anomaly summary records |
+
+Retain the run ID, Git commit, master seed, detector mode, manifest, Python and dependency versions, operating system, and generated artifacts together for reproducibility.
+
+## Reproducibility
+
+The runner executes targets serially, uses fixed request budgets from the manifest, derives target-specific seeds from the master seed, and applies startup and wall-clock limits. Capture the environment before each experiment:
+
+```bash
 python -m scripts.check_experiment_environment --json
-For multi-seed studies, preserve each run's ID and outputs. Compare results only when the target inventory, request budgets, detector configuration, and execution environment are sufficiently aligned. Consult [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md) before interpreting results.
-Research status and limitations
-This repository is an evolving research prototype. The following limitations are important when interpreting its outputs:
-- Ground truth is not independently verified. All 100 label rows currently contain source-derived draft labels. The independent-review template provides for two distinct reviewers and evidence references. Until labels are independently verified, the evaluator excludes them and the project cannot support measured precision, recall, or F1 claims.
-- No controlled RESTler comparison is included. RESTler is not distributed with this repository, and no controlled comparative results are reported. [`docs/restler-comparison.md`](docs/restler-comparison.md) describes the intended comparison protocol and mapping workflow.
-- Behavioral anomalies are not synonymous with vulnerabilities. Latency changes, response-size changes, status changes, content-type mismatches, and repeated fingerprints are signals requiring interpretation. A security finding requires evidence that a security property was violated.
-- Route discovery is limited. The runner uses manifest-defined route information and Swagger-assisted discovery. It is not a complete OpenAPI implementation, automatic multi-service crawler, or general stateful API dependency discovery engine.
-- Authorization coverage is selective. The explicit owner/other-user checks cover the two configured synthetic BOLA scenarios; they do not generalize to every object model, role, tenant, or authentication scheme.
-- Sandboxing has a defined threat boundary. Bubblewrap provides namespace-based process isolation, not a virtual machine or proof that arbitrary hostile code is safe. Per-process resource limits are applied; aggregate cgroup controls are best-effort when the host exposes a usable cgroup v2 hierarchy. No dedicated seccomp policy is installed by the current implementation. Review [`docs/sandbox-threat-model.md`](docs/sandbox-threat-model.md) before adding untrusted benchmark programs.
-- Synthetic benchmark scope. The benchmark fixtures do not establish real-world vulnerability prevalence, and results from this suite should not be generalized to production microservices without additional evaluation.
-- No full benchmark artifact is committed by default. The repository includes a manually triggered GitHub Actions workflow for full runs; it is separate from the push/pull-request test workflow because full runs can be resource intensive.
-These limitations are part of the current research status and should be retained in papers, reports, and presentations that use this software.
-Development with LLMs and coding agents
-Development of this repository has used large language models (LLMs) and AI-assisted coding agents as software-development aids. Depending on the task, these tools have assisted with activities such as:
+```
 
-- exploring and explaining the existing codebase;
-- brainstorming architecture and implementation approaches;
-- drafting or refining Python code and configuration;
-- generating and improving unit or integration tests;
-- identifying potential defects and edge cases;
-- improving documentation, experiment descriptions, and developer workflows.
+For multi-seed studies, preserve every run ID and output directory. Comparisons should use the same target inventory, request budget, detector configuration, and sufficiently similar execution environment.
 
-AI assistance does not replace engineering review or scientific validation. Generated or suggested code and text must be reviewed, tested, and checked by the project maintainers. The maintainers remain responsible for the correctness, security, provenance, licensing compatibility, and research claims of the published repository. No particular LLM provider, model, or agent version is implied by this general disclosure; record exact tools and versions in an experiment or publication when they are relevant and known.
+## Research Status and Limitations
 
-For academic use, authors should disclose AI assistance in accordance with the target institution, conference, journal, and publisher policies. LLM-generated content must not be treated as an independent reviewer, ground-truth authority, or source of experimental evidence. Benchmark labels require independent human review as described in [`docs/ground-truth.md`](docs/ground-truth.md).
+This repository is an evolving research prototype. Its current limitations include:
 
-#Repository structure
+- **Ground truth is not independently verified.** Current labels are source-derived drafts and should not be presented as confirmed results.
+- **Anomalies are not vulnerabilities.** Statistical deviations require additional evidence and security-property review.
+- **Route discovery is limited.** The system uses manifest route metadata and Swagger-assisted discovery, rather than a complete OpenAPI parser or general-purpose service crawler.
+- **Authorization coverage is selective.** Explicit owner/other-user checks cover configured synthetic BOLA fixtures only.
+- **Sandboxing is process isolation, not a virtual machine.** Bubblewrap has a defined threat boundary and should not be assumed to safely execute arbitrary untrusted code.
+- **The benchmark is synthetic.** Fixture behavior does not establish real-world vulnerability prevalence or production-system risk.
+- **No controlled RESTler comparison is included.** See [`docs/restler-comparison.md`](docs/restler-comparison.md) for the proposed comparison protocol.
+- **No full benchmark artifact is committed by default.** Full-run artifacts are generated separately through the benchmark workflow.
+
+These limitations should be retained in research papers, reports, and presentations that use this project.
+
+## Repository Structure
+
+```text
 .
 ├── .github/workflows/
-│   ├── benchmark.yml              # Manually triggered full benchmark workflow
-│   └── tests.yml                  # Push/PR test and consistency checks
+│   ├── benchmark.yml              # Manually triggered benchmark workflow
+│   └── tests.yml                  # Test and consistency workflow
 ├── docs/
-│   ├── architecture.md            # Components and execution flow
-│   ├── benchmark-protocol.md       # Run configuration and reproducibility
-│   ├── ground-truth.md             # Label verification policy
-│   ├── restler-comparison.md       # Proposed baseline comparison protocol
-│   └── sandbox-threat-model.md     # Isolation boundary and limitations
+│   ├── architecture.md
+│   ├── benchmark-protocol.md
+│   ├── ground-truth.md
+│   ├── restler-comparison.md
+│   └── sandbox-threat-model.md
 ├── notebook/
-│   └── generate_plots.py           # Plot generation from anomaly summaries
+│   └── generate_plots.py
 ├── research_benchmark/
-│   ├── manifest.yaml               # Canonical 100-target inventory
-│   └── metadata/                   # Draft labels and comparison mappings
-├── scripts/                        # Validation, evaluation, and experiment tools
+│   ├── manifest.yaml
+│   ├── metadata/
+│   └── 100 synthetic target directories
+├── scripts/                        # Validation, evaluation, and environment tools
 ├── src/
-│   ├── detectors/                  # Statistical, fingerprint, and BOLA checks
-│   ├── execution/                  # Manifest, runner, sandbox, and worker
-│   ├── telemetry/                  # Versioned event schema and JSONL writer
-│   ├── evaluation/                 # Detection aggregation and metrics
-│   └── fuzzer.py                   # Request mutation and detection coordination
+│   ├── detectors/
+│   ├── evaluation/
+│   ├── execution/
+│   ├── telemetry/
+│   └── fuzzer.py
 ├── tests/
 │   ├── unit/
 │   └── integration/
-├── LICENSE.md                      # Apache License 2.0
-├── requirements.txt                # Runtime dependencies
-├── requirements-dev.txt            # Runtime and development/test dependencies
-└── run_test.py                      # Benchmark command-line entry point
+├── LICENSE.md
+├── requirements.txt
+├── requirements-dev.txt
+└── run_test.py
+```
 
-#Contributing#
+## Testing
 
-Issues, reproducible bug reports, documentation improvements, and research extensions are welcome. Before submitting a change:
+Run the test suite:
 
-1. Open an issue or describe the intended change in the pull request.
-2. Keep benchmark changes synchronized across the manifest, labels, and relevant documentation.
+```bash
+python -m pytest
+```
+
+Run benchmark metadata consistency checks:
+
+```bash
+python -m scripts.check_benchmark_labels
+python -m scripts.check_experiment_environment --json
+```
+
+## Contributing
+
+Contributions are welcome. Before submitting a pull request:
+
+1. Open an issue or clearly describe the proposed change.
+2. Keep the manifest, labels, fixture implementations, and documentation synchronized.
 3. Add or update tests for behavioral changes.
-4. Run the test suite and metadata checks:
-   python -m pytest
-   python -m scripts.check_benchmark_labels
-5. Do not mark labels as independently verified without the review evidence and process required by [`docs/ground-truth.md`](docs/ground-truth.md).
-6. Document changes that affect experiment comparability, sandbox assumptions, telemetry schema, or reported metrics.
-License
+4. Run the test suite and metadata checks.
+5. Do not classify a draft label as independently verified without the required evidence and review process.
+6. Document changes that affect experimental comparability, sandbox assumptions, telemetry, or metrics.
 
-This project is distributed under the Apache License, Version 2.0. The full license text is available in [`LICENSE.md`](LICENSE.md). You may use, reproduce, modify, and distribute the project subject to the terms and conditions of that license. The license also contains conditions concerning notices, attribution, patent rights, and redistribution.
+## Development with AI-Assisted Tools
 
-Unless a separate notice says otherwise, contributions to this repository are intended to be provided under the same project license. Review the license text for the complete terms. Third-party dependencies and external tools remain subject to their own licenses and terms.
+Development of this repository has used large language models and AI-assisted coding agents as software-development aids. Such tools may assist with code exploration, architecture brainstorming, implementation, testing, documentation, and defect analysis.
 
-#Citation#
+AI assistance does not replace engineering review or scientific validation. Generated code and text must be tested and reviewed by the project maintainers. For academic use, disclose AI assistance according to the policies of the relevant institution, conference, journal, or publisher.
 
-If you use this repository in academic work, please cite the specific release or commit you used. A citation record can be added once the project has a stable release and the authors have finalized the preferred citation metadata. At minimum, record:
+## License
 
-- project title and repository URL;
-- author or maintainer name(s);
-- release tag or Git commit hash;
-- access date;
-- benchmark manifest version and experiment run IDs.
+This project is licensed under the **Apache License, Version 2.0**. See [`LICENSE.md`](LICENSE.md) for the complete terms.
 
-Do not cite the software as having validated detection accuracy unless the corresponding labels have been independently verified and the reported evaluation has actually been conducted.
+Copyright (c) 2026 Japneet Kaur ([ogiwbuz188](https://github.com/ogiwbuz188)).
+
+## Citation
+
+When using this repository in academic work, cite the exact release or commit used and record the benchmark manifest and experiment run IDs. Include:
+
+- Project title and repository URL
+- Author or maintainer name
+- Release tag or Git commit hash
+- Access date
+- Benchmark manifest version
+- Experiment run ID(s)
+
+Do not claim validated detection accuracy unless labels have been independently reviewed and the corresponding evaluation has been completed.
+
+## Project Origin
+
+This project was created as a high school student research project. It is intended to demonstrate practical exploration of API security, software engineering, sandboxed experimentation, reproducibility, and responsible AI-assisted development. This README and the project as a whole are provided for educational and authorized research purposes; it is not a replacement for professional penetration testing or production security assurance.
