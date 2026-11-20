@@ -3,6 +3,9 @@ import shutil
 import sys
 
 
+_PREMOUNTED_PREFIXES = tuple(map(Path, ("/usr", "/lib", "/lib64")))
+
+
 class BubblewrapSandbox:
     def __init__(self, repository_root, data_directory, executable=None):
         if sys.platform != "linux":
@@ -23,7 +26,7 @@ class BubblewrapSandbox:
         if not benchmark.entrypoint.is_relative_to(self.benchmark_root):
             raise ValueError("Benchmark entrypoint must remain under research_benchmark")
 
-        python_path, runtime_bind = self._python_mount()
+        python_path, runtime_binds = self._python_mount()
         target_path = (
             Path("/research_benchmark")
             / benchmark.entrypoint.relative_to(self.benchmark_root)
@@ -77,7 +80,7 @@ class BubblewrapSandbox:
             "--clearenv",
             "--setenv",
             "PATH",
-            "/runtime/bin:/usr/bin",
+            f"{Path(python_path).parent}:/usr/bin:/bin",
             "--setenv",
             "PYTHONPATH",
             "/app",
@@ -88,8 +91,13 @@ class BubblewrapSandbox:
             "HOME",
             "/tmp",
         ]
-        if runtime_bind:
-            command.extend(["--ro-bind", runtime_bind[0], runtime_bind[1]])
+        for source, destination in runtime_binds:
+            # bwrap does not guarantee that arbitrary host-prefix parent
+            # directories exist in its new root. Create them before mounting.
+            for parent in _missing_mount_parents(destination):
+                command.extend(["--dir", str(parent)])
+            command.extend(["--dir", str(destination)])
+            command.extend(["--ro-bind", str(source), str(destination)])
 
         command.extend(
             [
@@ -124,20 +132,40 @@ class BubblewrapSandbox:
 
     @staticmethod
     def _python_mount():
+        """Return the host interpreter path and runtime prefixes to bind.
+
+        Mount Python at its original absolute prefix. Relocating it to a new
+        path breaks Python installations whose compiled-in prefix or
+        ``pyvenv.cfg`` refers to the host path (notably setup-python's toolcache).
+        """
         prefix = Path(sys.prefix).resolve()
         base_prefix = Path(sys.base_prefix).resolve()
         executable = Path(sys.executable).resolve()
-
-        if prefix == base_prefix:
-            if executable.is_relative_to(Path("/usr")):
-                return str(executable), None
-            if executable.is_relative_to(prefix):
-                relative_executable = executable.relative_to(prefix)
-                return f"/runtime/{relative_executable}", (prefix, "/runtime")
+        if not executable.is_file():
+            raise RuntimeError(f"Python executable does not exist: {executable}")
+        if not executable.is_relative_to(prefix):
             raise RuntimeError("Python executable is outside its runtime prefix")
 
-        if not executable.is_relative_to(prefix):
-            raise RuntimeError("Python executable is outside the active virtualenv")
+        prefixes = []
+        for candidate in (base_prefix, prefix):
+            if any(candidate == mounted or candidate.is_relative_to(mounted)
+                   for mounted in _PREMOUNTED_PREFIXES):
+                continue
+            if candidate not in prefixes:
+                prefixes.append(candidate)
 
-        relative_executable = executable.relative_to(prefix)
-        return f"/runtime/{relative_executable}", (prefix, "/runtime")
+        return str(executable), [(candidate, candidate) for candidate in prefixes]
+
+
+def _missing_mount_parents(destination):
+    """List destination ancestors that are not provided by existing root binds."""
+    destination = Path(destination)
+    parents = []
+    current = destination.parent
+    while current != Path("/") and not any(
+        current == mounted or current.is_relative_to(mounted)
+        for mounted in _PREMOUNTED_PREFIXES
+    ):
+        parents.append(current)
+        current = current.parent
+    return reversed(parents)
