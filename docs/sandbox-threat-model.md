@@ -16,12 +16,16 @@ and a temporary home directory. Bubblewrap is configured to die with its
 parent; the outer runner applies per-process resource limits and a wall-clock
 timeout, then terminates the benchmark process group on timeout.
 
+Path-traversal benchmarks additionally receive a per-run random canary file at
+`/tmp/canary_secret.txt`, mounted read-only. Only the exact file is mounted
+from the host; the host temporary directory is not exposed to the target.
+
 ## Limits of the boundary
 
 This is namespace-based process isolation, not a VM, container security
 certification, or a claim that arbitrary hostile code is safe. It relies on the
 host Linux kernel and Bubblewrap configuration. It does not install a dedicated
-seccomp policy or use cgroups for aggregate CPU or memory accounting. CPU time,
+seccomp policy or guarantee cgroups for aggregate CPU or memory accounting. CPU time,
 address space, and file size are limited per process, so those limits are not
 aggregate quotas for every descendant process. A benchmark may still exercise
 kernel attack surface or cause host load before the wall-clock timeout.

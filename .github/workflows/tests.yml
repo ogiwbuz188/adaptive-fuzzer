@@ -9,7 +9,7 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,7 +23,33 @@ jobs:
           sudo apt-get install --yes bubblewrap
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Run unit and integration tests
-        run: python -m pytest
+      - name: Run lint
+        run: python -m ruff check src scripts run_test.py tests
+      - name: Run tests with branch coverage
+        run: python -m pytest --cov=src --cov-branch --cov-report=xml --cov-report=json --cov-report=term
+      - name: Enforce detector and execution coverage
+        run: python -m scripts.check_component_coverage coverage.json
+      - name: Run detector mutation tests
+        run: |
+          mutmut run --CI
+          mutmut results > mutation-results.txt
+      - name: Audit runtime dependencies
+        run: python -m pip_audit -r requirements.txt
+      - name: Publish coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Publish mutation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: mutation-results.txt
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Validate manifest and label coverage
         run: python -m scripts.check_benchmark_labels

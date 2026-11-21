@@ -2,6 +2,16 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 
 
+def _truncate_sample(value, limit=512):
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        encoded = value[:limit]
+    else:
+        encoded = str(value).encode("utf-8")[:limit]
+    return encoded.decode("utf-8", errors="ignore")
+
+
 @dataclass(frozen=True)
 class TelemetryEvent:
     run_id: str
@@ -17,7 +27,9 @@ class TelemetryEvent:
     anomalies: tuple[str, ...]
     timestamp: str
     principal: str | None = None
-    schema_version: int = 1
+    payload_sample: str | None = None
+    response_snippet: str | None = None
+    schema_version: int = 2
 
     @classmethod
     def create(
@@ -34,6 +46,8 @@ class TelemetryEvent:
         outcome,
         anomalies,
         principal=None,
+        payload_sample=None,
+        response_snippet=None,
     ):
         if not all((run_id, benchmark_id, request_id, method, route, outcome)):
             raise ValueError("Telemetry event identifiers and outcome are required")
@@ -56,6 +70,8 @@ class TelemetryEvent:
             anomalies=tuple(sorted(set(anomalies))),
             timestamp=datetime.now(timezone.utc).isoformat(),
             principal=principal,
+            payload_sample=_truncate_sample(payload_sample),
+            response_snippet=_truncate_sample(response_snippet),
         )
 
     def as_dict(self):

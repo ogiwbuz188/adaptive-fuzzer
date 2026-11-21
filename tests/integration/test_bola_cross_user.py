@@ -158,6 +158,24 @@ def test_probe_requires_distinct_user_credentials_and_known_object():
     probe = build_probe("http://localhost")
     with pytest.raises(ValueError, match="owned_object_id"):
         probe.probe("/api/v1/objects", owned_object_id=None)
+    with pytest.raises(ValueError, match="route"):
+        probe.probe("https://example.com/api/items", owned_object_id=42)
+    with pytest.raises(ValueError, match="object parameter"):
+        probe.probe(
+            "/api/v1/objects",
+            owned_object_id=42,
+            object_parameter="",
+        )
+
+    with pytest.raises(ValueError, match="Headers for both"):
+        BOLAProbe("http://localhost", {}, {"Authorization": "Bearer other"})
+    with pytest.raises(ValueError, match="timeout"):
+        BOLAProbe(
+            "http://localhost",
+            {"Authorization": "Bearer owner"},
+            {"Authorization": "Bearer other"},
+            timeout=0,
+        )
 
 
 def test_probe_refuses_non_loopback_targets():
@@ -167,3 +185,11 @@ def test_probe_refuses_non_loopback_targets():
             {"Authorization": "Bearer owner"},
             {"Authorization": "Bearer other"},
         )
+
+
+def test_object_id_can_be_confirmed_inside_response_arrays():
+    class Response:
+        def json(self):
+            return {"objects": [{"id": "42"}]}
+
+    assert BOLAProbe._contains_object_id(Response(), "id", 42)

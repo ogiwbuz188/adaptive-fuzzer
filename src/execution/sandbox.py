@@ -1,6 +1,8 @@
 from pathlib import Path
+import secrets
 import shutil
 import sys
+import tempfile
 
 
 _PREMOUNTED_PREFIXES = tuple(map(Path, ("/usr", "/lib", "/lib64")))
@@ -21,6 +23,12 @@ class BubblewrapSandbox:
             )
 
         self.data_directory.mkdir(parents=True, exist_ok=True)
+        self._canary_directory = tempfile.TemporaryDirectory(
+            prefix="adaptive-fuzzer-canary-"
+        )
+        self.canary_token = secrets.token_urlsafe(32)
+        self.canary_path = Path(self._canary_directory.name) / "canary_secret.txt"
+        self.canary_path.write_text(self.canary_token, encoding="utf-8")
 
     def build_command(self, benchmark, seed, run_id, detector_mode):
         if not benchmark.entrypoint.is_relative_to(self.benchmark_root):
@@ -91,6 +99,14 @@ class BubblewrapSandbox:
             "HOME",
             "/tmp",
         ]
+        if benchmark.category == "Injection_Path_Traversals":
+            command.extend(
+                [
+                    "--ro-bind",
+                    str(self.canary_path),
+                    "/tmp/canary_secret.txt",
+                ]
+            )
         for source, destination in runtime_binds:
             # bwrap does not guarantee that arbitrary host-prefix parent
             # directories exist in its new root. Create them before mounting.
@@ -128,6 +144,8 @@ class BubblewrapSandbox:
                 detector_mode,
             ]
         )
+        if benchmark.category == "Injection_Path_Traversals":
+            command.extend(["--canary-token", self.canary_token])
         return [str(part) for part in command]
 
     @staticmethod

@@ -30,6 +30,7 @@ import requests
 
 from src.detectors.response_fingerprint import ResponseFingerprintDetector
 from src.detectors.statistical import StatisticalDetector
+from src.detectors.path_oracle import PathTraversalOracle
 from src.telemetry.schema import TelemetryEvent
 
 
@@ -141,8 +142,13 @@ class AdvancedBehavioralFuzzer:
         run_id="",
         detector_mode="statistical+fingerprint",
         telemetry_writer=None,
+        path_canary_token=None,
     ):
-        if detector_mode not in {"statistical", "statistical+fingerprint"}:
+        if detector_mode not in {
+            "semantic-only",
+            "statistical",
+            "statistical+fingerprint",
+        }:
             raise ValueError(f"Unsupported detector mode: {detector_mode}")
         self.base_url = base_url.rstrip("/")
         self.max_workers = max_workers
@@ -152,6 +158,11 @@ class AdvancedBehavioralFuzzer:
         self.run_id = run_id
         self.detector_mode = detector_mode
         self.telemetry_writer = telemetry_writer
+        self.path_oracle = (
+            PathTraversalOracle(path_canary_token)
+            if path_canary_token is not None
+            else None
+        )
         self.request_counter = 0
         self.request_counter_lock = threading.Lock()
         self.endpoints = []
@@ -242,6 +253,7 @@ class AdvancedBehavioralFuzzer:
                     params = {}
                     if blueprint.get("query"):
                         params[blueprint["query"][0]] = "warmup"
+                    payload = params
                     r = requests.request(method, url, params=params, timeout=timeout, headers=headers)
                 dur = time.time() - start
                 self._record_telemetry(
@@ -251,6 +263,8 @@ class AdvancedBehavioralFuzzer:
                     dur,
                     "baseline",
                     [],
+                    payload_sample=payload,
+                    response_snippet=r.content,
                 )
                 lats.append(dur)
                 statuses.append(r.status_code)
@@ -494,6 +508,8 @@ class AdvancedBehavioralFuzzer:
         duration,
         outcome,
         anomalies,
+        payload_sample=None,
+        response_snippet=None,
     ):
         if self.telemetry_writer is None:
             return
@@ -517,12 +533,24 @@ class AdvancedBehavioralFuzzer:
                 duration_ms=duration * 1000,
                 outcome=outcome,
                 anomalies=anomalies,
+                payload_sample=(
+                    json.dumps(
+                        payload_sample,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        default=str,
+                    )
+                    if payload_sample is not None
+                    else None
+                ),
+                response_snippet=response_snippet,
             )
         )
 
     def analyze(self, response, duration, method, url, send_payload):
         """Analyze responses with dedicated statistical and fingerprint detectors."""
         anomalies = []
+        semantic_only = self.detector_mode == "semantic-only"
 
         try:
             body = (response.text or "").lower()
@@ -530,37 +558,42 @@ class AdvancedBehavioralFuzzer:
             body = ""
 
         status = response.status_code if hasattr(response, "status_code") else 0
+        if self.path_oracle and self.path_oracle.detect(
+            getattr(response, "content", b"")
+        ):
+            anomalies.append("PATH_TRAVERSAL_CANARY")
 
-        if status >= 500:
+        if status >= 500 and (not semantic_only or status == 500):
             anomalies.append("500_INTERNAL_SERVER_ERROR")
-        elif status == 413:
+        elif not semantic_only and status == 413:
             anomalies.append("413_PAYLOAD_TOO_LARGE")
-        elif status == 429:
+        elif not semantic_only and status == 429:
             anomalies.append("429_RATE_LIMIT_LOCK")
 
         parsed = urlparse(url)
         path = parsed.path
         cur_len = len(response.content or b"")
         content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
-        statistical_anomalies = self.statistical_detector.detect(
-            (method, path),
-            cur_len,
-            duration,
-            status,
-            content_type,
-        )
-        anomalies.extend(
-            "CONTENTTYPE_MISMATCH" if item == "CONTENT_TYPE_MISMATCH" else item
-            for item in statistical_anomalies
-        )
-        if not self.statistical_detector.has_baseline((method, path)):
-            if cur_len == 0:
-                anomalies.append("EMPTY_RESPONSE_BODY")
-            elif cur_len > 200000:
-                anomalies.append("UNEXPECTED_LARGE_RESPONSE")
+        if not semantic_only:
+            statistical_anomalies = self.statistical_detector.detect(
+                (method, path),
+                cur_len,
+                duration,
+                status,
+                content_type,
+            )
+            anomalies.extend(
+                "CONTENTTYPE_MISMATCH" if item == "CONTENT_TYPE_MISMATCH" else item
+                for item in statistical_anomalies
+            )
+            if not self.statistical_detector.has_baseline((method, path)):
+                if cur_len == 0:
+                    anomalies.append("EMPTY_RESPONSE_BODY")
+                elif cur_len > 200000:
+                    anomalies.append("UNEXPECTED_LARGE_RESPONSE")
 
         hdr_len = response.headers.get("Content-Length")
-        if hdr_len is not None:
+        if not semantic_only and hdr_len is not None:
             try:
                 if int(hdr_len) != cur_len:
                     anomalies.append("CONTENT_LENGTH_MISMATCH")
@@ -587,14 +620,18 @@ class AdvancedBehavioralFuzzer:
                 anomalies.append("STACK_OR_FATAL_TRACE")
                 break
 
-        ctype_l = response.headers.get("Content-Type", "").lower()
-        if "application/json" in ctype_l:
-            try:
-                response.json()
-            except Exception:
-                anomalies.append("MALFORMED_JSON_RESPONSE")
-        else:
-            if ("text" in ctype_l or "html" in ctype_l or ctype_l == "") and b"\x00" in (response.content or b""):
+        if not semantic_only:
+            ctype_l = response.headers.get("Content-Type", "").lower()
+            if "application/json" in ctype_l:
+                try:
+                    response.json()
+                except Exception:
+                    anomalies.append("MALFORMED_JSON_RESPONSE")
+            elif (
+                "text" in ctype_l
+                or "html" in ctype_l
+                or ctype_l == ""
+            ) and b"\x00" in (response.content or b""):
                 anomalies.append("BINARY_IN_TEXT_RESPONSE")
 
         key = (method, path)
@@ -618,6 +655,8 @@ class AdvancedBehavioralFuzzer:
             duration,
             "anomaly" if anomalies else "normal",
             anomalies,
+            payload_sample=send_payload,
+            response_snippet=getattr(response, "content", None),
         )
 
     def _send_partial_http(self, url, method, headers, body_bytes, timeout=2):

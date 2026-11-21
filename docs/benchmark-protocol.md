@@ -20,6 +20,18 @@ Repeat the selected inventory with independent master seeds:
 python run_test.py --seeds 1 2 3 --detector-mode statistical
 ```
 
+Run the semantic-only, statistical, and statistical-plus-fingerprint modes
+with matching seeds and manifest budgets:
+
+```bash
+python -m scripts.run_detector_ablation --seeds 1,2,3
+```
+
+The wrapper records separate run IDs for each mode. Evaluate those runs
+individually and aggregate their evaluation JSON files with
+`python -m scripts.aggregate_evaluations <run-1.json> <run-2.json> ...`.
+Evaluation remains unavailable until labels are independently verified.
+
 For a bounded local smoke test, select one target:
 
 ```bash
@@ -56,8 +68,10 @@ only when their target inventory, budgets, environment, and detector
 configuration are compatible. Fixed seeds do not eliminate timing, scheduling,
 or platform variation.
 
-Use `python -m scripts.check_experiment_environment --json` to record commit,
-Python, platform, dependency, Bubblewrap, and RESTler availability. Use
+`run_test.py` writes the full source, Python, package, kernel, Bubblewrap,
+hardware, seed, and detector provenance to `data/run_manifest.json` before
+starting each run. Use `python -m scripts.check_experiment_environment --json`
+to print an additional environment snapshot. Use
 `python -m scripts.evaluate_run --json <run-id>` only after independent
 ground-truth labels are marked `independently_verified`.
 

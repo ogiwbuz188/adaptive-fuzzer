@@ -21,13 +21,18 @@ guarantee identical timing or responses across hosts.
 
 ## Detection modes
 
+- `semantic-only` flags HTTP 500 responses and stack/fatal trace markers only.
 - `statistical` runs the statistical response anomaly detector.
 - `statistical+fingerprint` additionally runs the response-fingerprint
   detector.
 
-These are separate detector implementations. Fingerprinting is opt-in and is
-not part of the default statistical-only run. The detectors produce observations
-about benchmark responses, not verified vulnerability labels.
+Fingerprinting is opt-in and is not part of the default statistical-only run.
+For path-traversal targets, the sandbox additionally mounts a per-run random
+canary at `/tmp/canary_secret.txt`; the path oracle flags responses containing
+that exact token. This detects disclosure only when a response contains the
+canary and does not by itself establish vulnerability ground truth. All modes
+produce observations about benchmark responses, not verified vulnerability
+labels.
 
 ## BOLA scenario flow
 
@@ -44,8 +49,8 @@ For run ID `<run-id>` and data directory `data/`:
 
 - `data/reports/<run-id>/` contains one dashboard per target.
 - `data/logs/<run-id>/` contains target-specific stdout and stderr logs.
-- `data/raw/<run-id>.jsonl` contains versioned request events without request
-  payloads.
+- `data/raw/<run-id>.jsonl` contains versioned request events with optional
+  payload samples and response snippets, each capped at 512 UTF-8 bytes.
 - `data/test_runs.csv` contains the legacy anomaly-summary rows used by the
   plotting script.
 

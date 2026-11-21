@@ -1,9 +1,7 @@
-import csv
 from pathlib import Path
 
 from scripts.generate_source_derived_labels import derive_label
 from src.execution.manifest import load_manifest
-from src.ground_truth import load_labels
 
 
 def test_source_derived_label_derivation():

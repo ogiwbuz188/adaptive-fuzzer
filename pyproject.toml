@@ -2,3 +2,7 @@
 addopts = "-ra"
 testpaths = ["tests"]
 python_files = "test_*.py"
+
+[tool.mutmut]
+paths_to_mutate = "src/detectors/statistical.py,src/detectors/bola.py"
+runner = "python -m pytest -x tests/unit/test_statistical_detector.py tests/integration/test_bola_cross_user.py"

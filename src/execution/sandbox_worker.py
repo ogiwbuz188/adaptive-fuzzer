@@ -166,6 +166,7 @@ def run_target(args):
         telemetry_writer=TelemetryWriter(
             raw_directory / f"{args.run_id}.jsonl"
         ),
+        path_canary_token=args.canary_token,
     )
     benchmark = next(
         item
@@ -238,8 +239,13 @@ def parse_args(argv=None):
     parser.add_argument(
         "--detector-mode",
         required=True,
-        choices=["statistical", "statistical+fingerprint"],
+        choices=[
+            "semantic-only",
+            "statistical",
+            "statistical+fingerprint",
+        ],
     )
+    parser.add_argument("--canary-token")
     return parser.parse_args(argv)
 
 

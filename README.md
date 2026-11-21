@@ -1,12 +1,12 @@
 # Adaptive Behavioral Fuzzer
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE.md)
-[![Python](https://img.shields.io/badge/Python-100%25-3776AB.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Linux-FCC624.svg)](https://linux.org/)
 
-**Adaptive Behavioral Fuzzer** is a research-oriented API fuzzing prototype designed to study whether execution-state deviations and runtime anomalies can expose potentially security-relevant behavior in synthetic REST API targets.
+**Adaptive Behavioral Fuzzer** is a research prototype for reproducible, sandboxed API fuzzing of 100 synthetic REST targets. It compares statistical response analysis and response fingerprinting, and includes a path-traversal canary oracle for the synthetic benchmark environment.
 
-The system uses manifest-driven route selection, sandboxed benchmark execution, deterministic seed generation, structured request telemetry, behavioral detectors, and repeatable evaluation workflows. It includes a 100-target benchmark suite spanning authorization, boundary-condition, path-traversal, and input-validation scenarios.
+The project provides a manifest-driven benchmark runner, deterministic per-target seeds, request telemetry, environment provenance, and report validation. It is intended to support controlled experiments on these fixtures; its anomaly reports are not confirmed vulnerabilities and its current labels are not independently verified.
 
 > [!IMPORTANT]
 > This project is intended for authorized research and testing only. A behavioral anomaly is **not automatically a vulnerability**. Detected findings must be independently reviewed and validated against a defined security property. Use only synthetic targets or systems where testing has been explicitly authorized.
@@ -14,13 +14,15 @@ The system uses manifest-driven route selection, sandboxed benchmark execution, 
 ## Key Capabilities
 
 - **Manifest-driven benchmarks** — Executes a canonical inventory of 100 synthetic API targets.
-- **Sandboxed execution** — Runs benchmark targets and local fuzzer workers inside separate Bubblewrap Linux namespaces.
+- **Sandboxed execution** — Runs each target and its fuzzer in a Bubblewrap Linux namespace with a private network namespace, resource limits, and a wall-clock timeout.
 - **Deterministic experiments** — Derives per-target seeds from a master seed and stable benchmark identifier.
-- **Behavioral detection** — Supports statistical response analysis and an optional response-fingerprint detector.
-- **Authorization scenarios** — Exercises selected owner-versus-other-user access patterns for synthetic BOLA fixtures.
-- **Structured telemetry** — Preserves request-level JSONL events, process logs, reports, dashboards, and run identifiers.
+- **Behavioral detection** — Provides a semantic-only baseline, statistical response analysis, and an optional response-fingerprint detector.
+- **Path-traversal oracle** — Mounts a per-run synthetic canary read-only for path-traversal targets and flags responses containing its exact token.
+- **Authorization scenarios** — Exercises the owner-versus-other-user checks explicitly configured for selected synthetic BOLA fixtures; this is not coverage of every BOLA target.
+- **Structured telemetry** — Writes JSONL request events with optional payload samples and response snippets, as well as process logs and reports.
+- **Environment provenance** — Records source commit, Python and package versions, kernel, Bubblewrap, CPU/RAM, seed, and detector mode per run.
 - **Reproducible evaluation** — Validates report completeness and evaluates only independently verified labels.
-- **CI/CD integration** — Includes automated tests, consistency checks, and a manually triggered benchmark workflow.
+- **CI checks** — Runs tests, Ruff, detector/execution line and branch coverage thresholds, mutation analysis, dependency auditing, and benchmark metadata checks.
 
 ## Benchmark Inventory
 
@@ -43,9 +45,11 @@ The default configuration specifies 40 fuzzing iterations per target, a 10-secon
 3. Bubblewrap starts the benchmark target and fuzzer worker in isolated namespaces.
 4. Route metadata is loaded from the manifest and supplemented by Swagger-assisted discovery.
 5. Requests are mutated and sent against the target while response characteristics are recorded.
-6. Statistical checks classify response deviations; fingerprint mode adds repeated-response analysis.
-7. Request-level telemetry, process logs, reports, and dashboards are preserved by run ID.
+6. The selected detector mode records response anomalies; path-traversal targets also use a random, per-run canary to detect direct disclosure of its token.
+7. Request-level telemetry, environment provenance, process logs, and reports are preserved by run ID.
 8. The runner validates that each selected target produced exactly one completed report.
+
+The canary detects only responses that contain its token. Neither canary matches nor other anomalies, by themselves, establish that a target violates a security property.
 
 For component details and execution flow, see [`docs/architecture.md`](docs/architecture.md).
 
@@ -121,6 +125,21 @@ Enable the optional response-fingerprint detector:
 python run_test.py --seed 1 --detector-mode statistical+fingerprint
 ```
 
+Run the semantic-only baseline, which flags HTTP 500 responses and stack or
+fatal trace markers without statistical or response-fingerprint signals:
+
+```bash
+python run_test.py --seed 1 --detector-mode semantic-only
+```
+
+Run all three detector modes with matching seeds and manifest budgets:
+
+```bash
+python -m scripts.run_detector_ablation --seeds 1,2,3
+```
+
+For a bounded ablation smoke test, add `--max-targets 1`.
+
 Run one target as a smoke test:
 
 ```bash
@@ -186,12 +205,25 @@ By default, run artifacts are written beneath `data/`:
 | `data/reports/<run-id>/` | Per-target reports and dashboards |
 | `data/logs/<run-id>/` | Target and fuzzer process logs |
 | `data/test_runs.csv` | Legacy anomaly summary records |
+| `data/run_manifest.json` | Environment provenance indexed by run ID |
 
 Retain the run ID, Git commit, master seed, detector mode, manifest, Python and dependency versions, operating system, and generated artifacts together for reproducibility.
 
+Each run records the source commit, Python version, `pip freeze`, kernel,
+Bubblewrap version, CPU/RAM specifications, master seed, and detector mode in
+`data/run_manifest.json`. Multiple seed runs are retained under distinct run
+IDs. JSONL telemetry schema version 2 includes optional `payload_sample` and
+`response_snippet` fields capped at 512 UTF-8 bytes; do not use the benchmark
+to log credentials or sensitive production data.
+
+The CI coverage gate applies to `src/detectors/` and `src/execution/` and
+requires at least 85% line and branch coverage. Mutation-test results are
+published as an artifact; surviving mutants indicate test gaps or equivalent
+mutations and should not be represented as a clean mutation score.
+
 ## Reproducibility
 
-The runner executes targets serially, uses fixed request budgets from the manifest, derives target-specific seeds from the master seed, and applies startup and wall-clock limits. Capture the environment before each experiment:
+The runner executes targets serially, uses fixed request budgets from the manifest, derives target-specific seeds from the master seed, and applies startup and wall-clock limits. The run manifest is written automatically before target execution. Capture an additional environment snapshot at any time with:
 
 ```bash
 python -m scripts.check_experiment_environment --json
@@ -207,7 +239,7 @@ This repository is an evolving research prototype. Its current limitations inclu
 - **Anomalies are not vulnerabilities.** Statistical deviations require additional evidence and security-property review.
 - **Route discovery is limited.** The system uses manifest route metadata and Swagger-assisted discovery, rather than a complete OpenAPI parser or general-purpose service crawler.
 - **Authorization coverage is selective.** Explicit owner/other-user checks cover configured synthetic BOLA fixtures only.
-- **Sandboxing is process isolation, not a virtual machine.** Bubblewrap has a defined threat boundary and should not be assumed to safely execute arbitrary untrusted code.
+- **Sandboxing is limited.** Bubblewrap provides namespace isolation, but this project does not install a dedicated seccomp policy; cgroup limits are best-effort and per-process limits are not aggregate process-tree quotas. Do not treat the sandbox as a virtual machine or as assurance that arbitrary untrusted code is safe.
 - **The benchmark is synthetic.** Fixture behavior does not establish real-world vulnerability prevalence or production-system risk.
 - **No controlled RESTler comparison is included.** See [`docs/restler-comparison.md`](docs/restler-comparison.md) for the proposed comparison protocol.
 - **No full benchmark artifact is committed by default.** Full-run artifacts are generated separately through the benchmark workflow.

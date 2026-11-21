@@ -6,8 +6,10 @@ import sys
 import uuid
 
 from scripts.validate_dataset import validate_reports
+from scripts.check_experiment_environment import collect_environment
 from src.execution.manifest import load_manifest
 from src.execution.runner import BenchmarkRunner
+from src.telemetry.writer import write_run_manifest
 
 
 ROOT = Path(__file__).resolve().parent
@@ -16,6 +18,17 @@ ROOT = Path(__file__).resolve().parent
 def _seed_for_benchmark(master_seed, benchmark_id):
     value = f"{master_seed}:{benchmark_id}".encode("utf-8")
     return int.from_bytes(hashlib.sha256(value).digest()[:4], "big")
+
+
+def _parse_seed_token(value):
+    try:
+        if "," in value:
+            return [int(seed) for seed in value.split(",")]
+        return int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "seeds must be comma-separated or space-separated integers"
+        ) from error
 
 
 def _parse_args(argv=None):
@@ -31,7 +44,7 @@ def _parse_args(argv=None):
     parser.add_argument(
         "--seeds",
         nargs="+",
-        type=int,
+        type=_parse_seed_token,
         help="Run the selected benchmark set independently for each seed.",
     )
     parser.add_argument("--run-id", default=uuid.uuid4().hex)
@@ -39,15 +52,34 @@ def _parse_args(argv=None):
     parser.add_argument("--max-targets", type=int)
     parser.add_argument(
         "--detector-mode",
-        choices=["statistical", "statistical+fingerprint"],
+        choices=[
+            "semantic-only",
+            "statistical",
+            "statistical+fingerprint",
+        ],
         default="statistical",
     )
     return parser.parse_args(argv)
 
 
+def _parse_seeds(values):
+    seeds = [
+        seed
+        for item in values
+        for seed in (
+            item
+            if isinstance(item, list)
+            else [int(value) for value in str(item).split(",")]
+        )
+    ]
+    if not seeds:
+        raise ValueError("at least one seed is required")
+    return seeds
+
+
 def main(argv=None):
     args = _parse_args(argv)
-    master_seeds = args.seeds if args.seeds is not None else [args.seed]
+    master_seeds = _parse_seeds(args.seeds) if args.seeds is not None else [args.seed]
     if any(seed < 0 for seed in master_seeds):
         raise ValueError("seed must be non-negative")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.run_id) or args.run_id in {
@@ -80,6 +112,12 @@ def main(argv=None):
         if len(master_seeds) > 1:
             run_id = f"{args.run_id}-seed-{master_seed}"
 
+        environment = collect_environment(master_seed, args.detector_mode)
+        write_run_manifest(
+            Path(args.data_directory) / "run_manifest.json",
+            run_id,
+            environment,
+        )
         print(
             f"Run {run_id}: seed={master_seed}, "
             f"detector={args.detector_mode}, targets={len(benchmarks)}"

@@ -14,6 +14,7 @@ on:
         default: statistical
         type: choice
         options:
+          - semantic-only
           - statistical
           - statistical+fingerprint
 
@@ -62,5 +63,6 @@ jobs:
             data/raw/**
             data/logs/**
             data/test_runs.csv
+            data/run_manifest.json
             notebook/*.png
           retention-days: 14
